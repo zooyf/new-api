@@ -16,14 +16,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { PublicLayout } from '@/components/layout'
 
-import { DocsContent } from './docs-content'
+/**
+ * Standalone entry for the API documentation page — renders the
+ * backend-independent docs UI with no router/network, so it can be built into a
+ * fully static bundle and mounted at any path behind a reverse proxy.
+ */
+import { StrictMode } from 'react'
+import ReactDOM from 'react-dom/client'
 
-export function ApiDocs() {
-  return (
-    <PublicLayout showMainContainer={false}>
-      <DocsContent />
-    </PublicLayout>
+import { StandaloneApp } from './standalone-app'
+
+import '@/i18n/config'
+import '@/styles/index.css'
+
+const rootElement = document.getElementById('root')
+if (rootElement) {
+  ReactDOM.createRoot(rootElement).render(
+    <StrictMode>
+      <StandaloneApp />
+    </StrictMode>
   )
 }
