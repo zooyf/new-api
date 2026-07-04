@@ -9,6 +9,9 @@ var ModelList = []string{
 	"doubao-seedance-1-5-pro-251215",
 	"doubao-seedance-2-0-260128",
 	"doubao-seedance-2-0-fast-260128",
+	"doubao-seedance-2-0-filter-off",
+	"doubao-seedance-2-0-fast-filter-off",
+	"dreamina-seedance-2-0-mini-filter-off",
 }
 
 var ChannelName = "doubao-video"
@@ -35,6 +38,22 @@ var videoPriceTable = map[string]map[videoPriceKey]float64{
 	"doubao-seedance-2-0-fast-260128": {
 		{hasVideo: false}: 37.0,
 		{hasVideo: true}:  22.0,
+	},
+	"doubao-seedance-2-0-filter-off": {
+		{hasVideo: false}:                7.0,
+		{hasVideo: true}:                 7.0,
+		{is1080p: true, hasVideo: false}: 7.7,
+		{is1080p: true, hasVideo: true}:  7.7,
+		{is4k: true, hasVideo: false}:    4.0,
+		{is4k: true, hasVideo: true}:     4.0,
+	},
+	"doubao-seedance-2-0-fast-filter-off": {
+		{hasVideo: false}: 5.6,
+		{hasVideo: true}:  5.6,
+	},
+	"dreamina-seedance-2-0-mini-filter-off": {
+		{hasVideo: false}: 3.5,
+		{hasVideo: true}:  3.5,
 	},
 }
 
