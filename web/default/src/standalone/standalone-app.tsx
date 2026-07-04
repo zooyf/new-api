@@ -30,7 +30,7 @@ function StandaloneShell() {
       <header className='fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-950/95'>
         <div className='flex items-center gap-2'>
           <span className='text-base font-semibold text-slate-950 dark:text-slate-50'>
-            NewAPI
+            NEXIGHT
           </span>
           <span className='rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400'>
             API Docs

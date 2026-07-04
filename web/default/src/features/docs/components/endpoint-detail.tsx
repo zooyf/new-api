@@ -22,11 +22,11 @@ import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Markdown } from '@/components/ui/markdown'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { cn } from '@/lib/utils'
 
 import { formatType } from '../lib/openapi-doc'
+import { DocsMarkdown } from './docs-markdown'
 import type {
   DocEndpoint,
   DocField,
@@ -301,11 +301,7 @@ function Description({ description }: { description: string }) {
   return (
     <section className='space-y-3'>
       <SectionHeading title={t('Description')} />
-      {description ? (
-        <Markdown className='prose-slate dark:prose-invert'>
-          {description}
-        </Markdown>
-      ) : null}
+      {description ? <DocsMarkdown>{description}</DocsMarkdown> : null}
     </section>
   )
 }

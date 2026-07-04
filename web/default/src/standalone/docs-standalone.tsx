@@ -27,7 +27,7 @@ import ReactDOM from 'react-dom/client'
 
 import { StandaloneApp } from './standalone-app'
 
-import '@/i18n/config'
+import './docs-i18n'
 import '@/styles/index.css'
 
 const rootElement = document.getElementById('root')

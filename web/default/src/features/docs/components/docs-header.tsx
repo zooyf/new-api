@@ -35,7 +35,7 @@ export function DocsHeader({ doc }: DocsHeaderProps) {
         <div className='min-w-0 space-y-1'>
           <div className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm'>
             <span className='font-semibold text-slate-950 dark:text-slate-50'>
-              NewAPI
+              NEXIGHT
             </span>
             <ChevronRight className='size-3.5 text-slate-400' />
             <span className='text-slate-500 dark:text-slate-400'>
