@@ -125,7 +125,7 @@ try {
         if (Test-Path $localSourceTar) {
             Remove-Item -LiteralPath $localSourceTar -Force
         }
-        Invoke-External git archive --format=tar -o $localSourceTar HEAD
+        Invoke-External git archive "--format=tar" "--output=$localSourceTar" HEAD
         Write-Host "Uploading source archive to ${RemoteHost}:$remoteSourceTar..."
         Invoke-External scp $localSourceTar "${RemoteHost}:$remoteSourceTar"
     } else {
