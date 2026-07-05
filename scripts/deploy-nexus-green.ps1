@@ -3,10 +3,10 @@
 Deploy the current checkout to the inactive green slot on nexus-sg.
 
 .DESCRIPTION
-This script builds a Docker image from the current working tree, uploads it to
-the production server, writes a green-slot Compose override, and recreates only
-the new-api-green container on 127.0.0.1:3002. It does not change Nginx traffic.
-Use scripts/set-nexus-canary.ps1 after health checks to shift traffic.
+This script builds a Docker image from the current commit, writes a green-slot
+Compose override, and recreates only the new-api-green container on
+127.0.0.1:3002. It does not change Nginx traffic. Use
+scripts/set-nexus-canary.ps1 after health checks to shift traffic.
 #>
 
 [CmdletBinding()]
@@ -22,6 +22,7 @@ param(
     [int]$ContainerPort = 3000,
     [int]$HealthTimeoutSeconds = 180,
     [switch]$AllowDirty,
+    [switch]$BuildOnRemote,
     [switch]$PreflightOnly,
     [switch]$KeepLocalImageTar,
     [switch]$Yes
@@ -73,9 +74,13 @@ Push-Location $RepoRoot
 try {
     $branch = Get-CommandOutput git rev-parse --abbrev-ref HEAD
     $sha = Get-CommandOutput git rev-parse --short=12 HEAD
+    $useRemoteBuild = $BuildOnRemote -or -not [bool](Get-Command docker -ErrorAction SilentlyContinue)
     $trackedDirty = Get-CommandOutput git status --porcelain --untracked-files=no
     if ($trackedDirty -and -not $AllowDirty) {
         throw "Tracked files have uncommitted changes. Commit them first, or pass -AllowDirty to deploy this exact working tree."
+    }
+    if ($trackedDirty -and $AllowDirty -and $useRemoteBuild) {
+        throw "Remote build uses git archive HEAD and cannot include dirty tracked files. Commit first, or run on a machine with local Docker."
     }
 
     if (-not $ImageTag) {
@@ -89,6 +94,7 @@ try {
         Write-Host "Branch: $branch"
         Write-Host "Commit: $sha"
         Write-Host "Image:  $image"
+        Write-Host "Build:  $(if ($useRemoteBuild) { 'remote Docker build from git archive' } else { 'local Docker build + upload' })"
         Write-Host "Green slot: 127.0.0.1:$GreenHostPort -> container :$ContainerPort"
         Write-Host "Nginx traffic will NOT be changed by this script."
         $answer = Read-Host "Type GREEN to continue"
@@ -108,20 +114,33 @@ try {
     New-Item -ItemType Directory -Force -Path $deployDir | Out-Null
     $safeTag = $ImageTag -replace '[^A-Za-z0-9_.-]', '_'
     $localTar = Join-Path $deployDir "$safeTag.tar"
+    $localSourceTar = Join-Path $deployDir "$safeTag-source.tar"
     $remoteTar = "$RemoteDir/releases/$safeTag.tar"
+    $remoteSourceTar = "$RemoteDir/releases/$safeTag-source.tar"
+    $remoteBuildDir = "$RemoteDir/builds/green-$safeTag-src"
 
-    Write-Host "Building Docker image $image..."
-    Invoke-External docker build --platform $Platform --pull -t $image $RepoRoot
+    Invoke-Remote "mkdir -p '$RemoteDir/releases' '$RemoteDir/builds'"
+    if ($useRemoteBuild) {
+        Write-Host "Local Docker is unavailable or -BuildOnRemote was set; building $image on $RemoteHost..."
+        if (Test-Path $localSourceTar) {
+            Remove-Item -LiteralPath $localSourceTar -Force
+        }
+        Invoke-External git archive --format=tar -o $localSourceTar HEAD
+        Write-Host "Uploading source archive to ${RemoteHost}:$remoteSourceTar..."
+        Invoke-External scp $localSourceTar "${RemoteHost}:$remoteSourceTar"
+    } else {
+        Write-Host "Building Docker image $image..."
+        Invoke-External docker build --platform $Platform --pull -t $image $RepoRoot
 
-    Write-Host "Saving image to $localTar..."
-    if (Test-Path $localTar) {
-        Remove-Item -LiteralPath $localTar -Force
+        Write-Host "Saving image to $localTar..."
+        if (Test-Path $localTar) {
+            Remove-Item -LiteralPath $localTar -Force
+        }
+        Invoke-External docker save -o $localTar $image
+
+        Write-Host "Uploading image archive to ${RemoteHost}:$remoteTar..."
+        Invoke-External scp $localTar "${RemoteHost}:$remoteTar"
     }
-    Invoke-External docker save -o $localTar $image
-
-    Write-Host "Uploading image archive to ${RemoteHost}:$remoteTar..."
-    Invoke-Remote "mkdir -p '$RemoteDir/releases'"
-    Invoke-External scp $localTar "${RemoteHost}:$remoteTar"
 
     $remoteScript = @"
 set -Eeuo pipefail
@@ -131,6 +150,10 @@ active_service="$ActiveServiceName"
 green_service="$GreenServiceName"
 image="$image"
 image_tar="$remoteTar"
+source_tar="$remoteSourceTar"
+build_dir="$remoteBuildDir"
+build_on_remote="$($useRemoteBuild.ToString().ToLowerInvariant())"
+platform="$Platform"
 green_host_port="$GreenHostPort"
 container_port="$ContainerPort"
 health_timeout="$HealthTimeoutSeconds"
@@ -150,8 +173,16 @@ if ! docker inspect "`$active_service" >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "Loading image archive..."
-docker load -i "`$image_tar"
+if [ "`$build_on_remote" = "true" ]; then
+    echo "Building image on remote host from source archive..."
+    rm -rf "`$build_dir"
+    mkdir -p "`$build_dir"
+    tar -xf "`$source_tar" -C "`$build_dir"
+    docker build --platform "`$platform" --pull -t "`$image" "`$build_dir"
+else
+    echo "Loading image archive..."
+    docker load -i "`$image_tar"
+fi
 
 app_env="`$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "`$active_service")"
 if [ -z "`$app_env" ]; then
@@ -230,6 +261,9 @@ exit 1
 finally {
     if (-not $KeepLocalImageTar -and $localTar -and (Test-Path $localTar)) {
         Remove-Item -LiteralPath $localTar -Force
+    }
+    if (-not $KeepLocalImageTar -and $localSourceTar -and (Test-Path $localSourceTar)) {
+        Remove-Item -LiteralPath $localSourceTar -Force
     }
     Pop-Location
 }
