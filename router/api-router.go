@@ -287,6 +287,14 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			systemInfoRoute.GET("/instances", controller.ListSystemInstances)
 		}
+		upstreamEventRoute := apiRouter.Group("/upstream-events")
+		upstreamEventRoute.Use(middleware.RootAuth())
+		{
+			upstreamEventRoute.GET("/stats", controller.GetUpstreamEventStats)
+			upstreamEventRoute.GET("/", controller.ListUpstreamEvents)
+			upstreamEventRoute.GET("/:id", controller.GetUpstreamEvent)
+			upstreamEventRoute.POST("/:id/retry", controller.RetryUpstreamEvent)
+		}
 
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)

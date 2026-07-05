@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service/upstreamevent"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 
@@ -229,6 +230,29 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if err := SettleBilling(ctx, relayInfo, quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
+	upstreamevent.EmitUpstreamResponse(ctx, relayInfo, &dto.Usage{
+		PromptTokens:     usage.InputTokens,
+		CompletionTokens: usage.OutputTokens,
+		TotalTokens:      totalTokens,
+		InputTokens:      usage.InputTokens,
+		OutputTokens:     usage.OutputTokens,
+		InputTokensDetails: &dto.InputTokenDetails{
+			TextTokens:  usage.InputTokenDetails.TextTokens,
+			AudioTokens: usage.InputTokenDetails.AudioTokens,
+		},
+		PromptTokensDetails: dto.InputTokenDetails{
+			TextTokens:  usage.InputTokenDetails.TextTokens,
+			AudioTokens: usage.InputTokenDetails.AudioTokens,
+		},
+		CompletionTokenDetails: dto.OutputTokenDetails{
+			TextTokens:  usage.OutputTokenDetails.TextTokens,
+			AudioTokens: usage.OutputTokenDetails.AudioTokens,
+		},
+	}, map[string]interface{}{
+		"quota":                  quota,
+		"relay_mode":             "realtime",
+		"tiered_billing_applied": tieredOk,
+	})
 
 	logModel := modelName
 	if extraContent != "" {
@@ -350,6 +374,11 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if err := SettleBilling(ctx, relayInfo, quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
+	upstreamevent.EmitUpstreamResponse(ctx, relayInfo, usage, map[string]interface{}{
+		"quota":                  quota,
+		"relay_mode":             "audio",
+		"tiered_billing_applied": tieredOk,
+	})
 
 	logModel := relayInfo.OriginModelName
 	if extraContent != "" {
@@ -445,6 +474,9 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 			checkAndSendQuotaNotify(relayInfo, quota, preConsumedQuota)
 		}
 	}
+	upstreamevent.EmitBillingDelta(nil, relayInfo, "postconsume", quota, preConsumedQuota, quota+preConsumedQuota, map[string]interface{}{
+		"send_email": sendEmail,
+	})
 
 	return nil
 }

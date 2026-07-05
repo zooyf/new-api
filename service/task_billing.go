@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service/upstreamevent"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 )
@@ -179,6 +180,9 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 		Group:     task.Group,
 		Other:     other,
 	})
+	upstreamevent.EmitTaskBillingDelta(task, "task_failure_refund", -quota, quota, 0, map[string]interface{}{
+		"reason": reason,
+	})
 }
 
 // RecalculateTaskQuota 通用的异步差额结算。
@@ -242,6 +246,9 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		Group:     task.Group,
 		Other:     other,
 		NodeName:  task.PrivateData.NodeName,
+	})
+	upstreamevent.EmitTaskBillingDelta(task, "task_recalculate", quotaDelta, preConsumedQuota, actualQuota, map[string]interface{}{
+		"reason": reason,
 	})
 }
 

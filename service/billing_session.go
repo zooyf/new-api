@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service/upstreamevent"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -100,8 +101,13 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	isPlayground := s.relayInfo.IsPlayground
 	tokenConsumed := s.tokenConsumed
 	extraReserved := s.extraReserved
+	preConsumedQuota := s.preConsumedQuota
 	subscriptionId := s.relayInfo.SubscriptionId
 	funding := s.funding
+	refundEvent := upstreamevent.BuildBillingDeltaEvent(c, s.relayInfo, "refund", -preConsumedQuota, preConsumedQuota, 0, map[string]interface{}{
+		"token_consumed_quota": tokenConsumed,
+		"extra_reserved_quota": extraReserved,
+	})
 
 	gopool.Go(func() {
 		// 1) 退还资金来源
@@ -119,6 +125,7 @@ func (s *BillingSession) Refund(c *gin.Context) {
 				common.SysLog("error refunding token quota: " + err.Error())
 			}
 		}
+		upstreamevent.Emit(refundEvent, upstreamevent.PriorityCritical)
 	})
 }
 

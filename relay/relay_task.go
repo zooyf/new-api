@@ -19,6 +19,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/upstreamevent"
 	"github.com/gin-gonic/gin"
 )
 
@@ -215,6 +216,12 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if err != nil {
 		return nil, service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
 	}
+	requestBodyBytes, err := io.ReadAll(requestBody)
+	if err != nil {
+		return nil, service.TaskErrorWrapper(err, "read_request_failed", http.StatusInternalServerError)
+	}
+	upstreamevent.EmitTaskSubmitRequest(c, info, requestBodyBytes)
+	requestBody = bytes.NewReader(requestBodyBytes)
 
 	// 9. 发送请求
 	resp, err := adaptor.DoRequest(c, info, requestBody)
@@ -248,6 +255,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		info.PriceData.OtherRatios = adjustedRatios
 		info.PriceData.Quota = finalQuota
 	}
+	upstreamevent.EmitTaskSubmitResponse(c, info, upstreamTaskID, taskData, platform, finalQuota)
 
 	return &TaskSubmitResult{
 		UpstreamTaskID: upstreamTaskID,

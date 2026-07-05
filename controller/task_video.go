@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service/upstreamevent"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
@@ -153,7 +153,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		if taskResult.TotalTokens > 0 {
 			// 获取模型名称
 			var taskData map[string]interface{}
-			if err := json.Unmarshal(task.Data, &taskData); err == nil {
+			if err := common.Unmarshal(task.Data, &taskData); err == nil {
 				if modelName, ok := taskData["model"].(string); ok && modelName != "" {
 					// 获取模型价格和倍率
 					modelRatio, hasRatioSetting, _ := ratio_setting.GetModelRatio(modelName)
@@ -206,6 +206,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 										modelRatio, finalGroupRatio, taskResult.TotalTokens,
 										logger.LogQuota(preConsumedQuota), logger.LogQuota(actualQuota), logger.LogQuota(quotaDelta))
 									model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
+									upstreamevent.EmitTaskBillingDelta(task, "legacy_video_token_recalculate", quotaDelta, preConsumedQuota, actualQuota, map[string]interface{}{
+										"total_tokens": taskResult.TotalTokens,
+									})
 								}
 							} else if quotaDelta < 0 {
 								// 需要退还多扣的费用
@@ -227,6 +230,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 										modelRatio, finalGroupRatio, taskResult.TotalTokens,
 										logger.LogQuota(preConsumedQuota), logger.LogQuota(actualQuota), logger.LogQuota(refundQuota))
 									model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
+									upstreamevent.EmitTaskBillingDelta(task, "legacy_video_token_recalculate", quotaDelta, preConsumedQuota, actualQuota, map[string]interface{}{
+										"total_tokens": taskResult.TotalTokens,
+									})
 								}
 							} else {
 								// quotaDelta == 0, 预扣费刚好准确
@@ -265,6 +271,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		common.SysLog("UpdateVideoTask task error: " + err.Error())
 		shouldRefund = false
 	}
+	if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
+		upstreamevent.EmitTaskTerminal(task, string(task.Status), taskResult, responseBody)
+	}
 
 	if shouldRefund {
 		// 任务失败且之前状态不是失败才退还额度，防止重复退还
@@ -273,6 +282,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		}
 		logContent := fmt.Sprintf("Video async task failed %s, refund %s", task.TaskID, logger.LogQuota(quota))
 		model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
+		upstreamevent.EmitTaskBillingDelta(task, "legacy_video_failure_refund", -quota, quota, 0, map[string]interface{}{
+			"reason": task.FailReason,
+		})
 	}
 
 	return nil
@@ -280,7 +292,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 
 func redactVideoResponseBody(body []byte) []byte {
 	var m map[string]any
-	if err := json.Unmarshal(body, &m); err != nil {
+	if err := common.Unmarshal(body, &m); err != nil {
 		return body
 	}
 	resp, _ := m["response"].(map[string]any)
@@ -297,7 +309,7 @@ func redactVideoResponseBody(body []byte) []byte {
 			}
 		}
 	}
-	b, err := json.Marshal(m)
+	b, err := common.Marshal(m)
 	if err != nil {
 		return body
 	}
