@@ -13,8 +13,7 @@ Use -Yes to skip the production confirmation prompt.
 Use -AllowDirty to deploy with tracked uncommitted changes.
 Use -HwdramaProxyOnly to deploy or update only the Hwdrama material proxy
 without recreating the running new-api application container.
-Set HWD_PROXY_UPSTREAM_API_KEY or pass -HwdramaProxyUpstreamApiKey to deploy
-the Hwdrama material proxy. The key is written only to the remote env file.
+Hwdrama proxy upstream routing is read only from routes.yml and secrets.env.
 #>
 
 [CmdletBinding()]
@@ -29,8 +28,6 @@ param(
     [string]$Platform = "linux/amd64",
     [int]$HealthTimeoutSeconds = 180,
     [int]$HwdramaProxyPort = 3001,
-    [string]$HwdramaProxyUpstreamBaseUrl = "http://ai.hwdrama.com",
-    [string]$HwdramaProxyUpstreamApiKey = $env:HWD_PROXY_UPSTREAM_API_KEY,
     [int]$HwdramaProxyTimeoutSeconds = 600,
     [switch]$AllowDirty,
     [switch]$PreflightOnly,
@@ -75,19 +72,11 @@ function Get-CommandOutput {
     return ($output -join "`n").Trim()
 }
 
-function ConvertTo-Base64 {
-    param([Parameter(Mandatory = $true)][string]$Value)
-    return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Value))
-}
-
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Push-Location $RepoRoot
 try {
     if ($HwdramaProxyOnly -and $SkipHwdramaProxy) {
         throw "-HwdramaProxyOnly cannot be combined with -SkipHwdramaProxy."
-    }
-    if (-not $SkipHwdramaProxy -and [string]::IsNullOrWhiteSpace($HwdramaProxyUpstreamApiKey)) {
-        throw "HWD_PROXY_UPSTREAM_API_KEY is required. Set the environment variable or pass -HwdramaProxyUpstreamApiKey."
     }
 
     $branch = Get-CommandOutput git rev-parse --abbrev-ref HEAD
@@ -149,8 +138,6 @@ try {
     $hwdramaProxyEnabledValue = if ($SkipHwdramaProxy) { "0" } else { "1" }
     $hwdramaProxyOnlyValue = if ($HwdramaProxyOnly) { "1" } else { "0" }
     $nginxUpdateEnabledValue = if ($SkipNginxUpdate) { "0" } else { "1" }
-    $hwdramaProxyUpstreamBaseUrlB64 = ConvertTo-Base64 $HwdramaProxyUpstreamBaseUrl
-    $hwdramaProxyUpstreamApiKeyB64 = ConvertTo-Base64 $HwdramaProxyUpstreamApiKey
 
     $remoteScript = @"
 set -Eeuo pipefail
@@ -169,13 +156,14 @@ hwdrama_proxy_only="$hwdramaProxyOnlyValue"
 nginx_update_enabled="$nginxUpdateEnabledValue"
 hwdrama_proxy_port="$HwdramaProxyPort"
 hwdrama_proxy_timeout="$HwdramaProxyTimeoutSeconds"
-hwdrama_proxy_upstream_base_url_b64="$hwdramaProxyUpstreamBaseUrlB64"
-hwdrama_proxy_upstream_api_key_b64="$hwdramaProxyUpstreamApiKeyB64"
 
 compose_file="`$remote_dir/docker-compose.yml"
 override_file="`$remote_dir/docker-compose.deploy.override.yml"
 proxy_override_file="`$remote_dir/docker-compose.hwdrama-proxy.override.yml"
 proxy_env_file="`$remote_dir/hwdrama-proxy.env"
+proxy_config_dir="`$remote_dir/hwdrama-proxy"
+proxy_routes_file="`$proxy_config_dir/routes.yml"
+proxy_secrets_file="`$proxy_config_dir/secrets.env"
 backup_dir="`$remote_dir/backups/`$(date -u +%Y%m%dT%H%M%SZ)-`$service_name"
 
 active_override_file="`$override_file"
@@ -209,6 +197,9 @@ if [ -f "`$override_file" ]; then
 fi
 if [ -f "`$proxy_override_file" ]; then
     cp "`$proxy_override_file" "`$backup_dir/docker-compose.hwdrama-proxy.override.yml"
+fi
+if [ -d "`$proxy_config_dir" ]; then
+    tar -C "`$remote_dir" -czf "`$backup_dir/hwdrama-proxy-config.tgz" hwdrama-proxy
 fi
 
 if [ "`$skip_backup" != "1" ] && [ "`$hwdrama_proxy_only" != "1" ]; then
@@ -244,12 +235,7 @@ if [ "`$hwdrama_proxy_enabled" = "1" ]; then
         echo "Cannot find SQL_DSN in `$service_name container environment." >&2
         exit 1
     fi
-    proxy_upstream_base_url="`$(printf '%s' "`$hwdrama_proxy_upstream_base_url_b64" | base64 -d)"
-    proxy_upstream_api_key="`$(printf '%s' "`$hwdrama_proxy_upstream_api_key_b64" | base64 -d)"
-    if [ -z "`$proxy_upstream_api_key" ]; then
-        echo "HWD_PROXY_UPSTREAM_API_KEY is required." >&2
-        exit 1
-    fi
+    mkdir -p "`$proxy_config_dir"
     umask 077
     {
         printf 'SQL_DSN=%s\n' "`$sql_dsn"
@@ -257,11 +243,98 @@ if [ "`$hwdrama_proxy_enabled" = "1" ]; then
             printf 'TZ=%s\n' "`$tz_value"
         fi
         printf 'HWD_PROXY_PORT=%s\n' "`$hwdrama_proxy_port"
-        printf 'HWD_PROXY_UPSTREAM_BASE_URL=%s\n' "`$proxy_upstream_base_url"
-        printf 'HWD_PROXY_UPSTREAM_API_KEY=%s\n' "`$proxy_upstream_api_key"
         printf 'HWD_PROXY_REQUEST_TIMEOUT_SECONDS=%s\n' "`$hwdrama_proxy_timeout"
+        printf 'HWD_PROXY_ROUTES_CONFIG=/app/hwdrama-proxy/routes.yml\n'
+        printf 'HWD_PROXY_SECRETS_FILE=/app/hwdrama-proxy/secrets.env\n'
     } > "`$proxy_env_file"
     chmod 600 "`$proxy_env_file"
+    if [ ! -f "`$proxy_secrets_file" ]; then
+        touch "`$proxy_secrets_file"
+        chmod 600 "`$proxy_secrets_file"
+    fi
+    if [ ! -f "`$proxy_routes_file" ]; then
+        cat > "`$proxy_routes_file" <<EOF
+version: 1
+
+actions:
+  ark_assets_list:
+    downstream_method: GET
+    downstream_path: /api/v3/ark/assets
+    default_upstream_method: GET
+    default_upstream_path: /api/v3/ark/assets
+  ark_assets_create:
+    downstream_method: POST
+    downstream_path: /api/v3/ark/assets
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/ark/assets
+  ark_assets_get:
+    downstream_method: GET
+    downstream_path: /api/v3/ark/assets/{asset_id}
+    default_upstream_method: GET
+    default_upstream_path: /api/v3/ark/assets/{asset_id}
+  ark_asset_groups_create:
+    downstream_method: POST
+    downstream_path: /api/v3/ark/assets/groups
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/ark/assets/groups
+  ark_real_person_assets_create:
+    downstream_method: POST
+    downstream_path: /api/v3/ark/real-person/assets
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/ark/real-person/assets
+  ark_real_person_assets_get:
+    downstream_method: GET
+    downstream_path: /api/v3/ark/real-person/assets/{asset_id}
+    default_upstream_method: GET
+    default_upstream_path: /api/v3/ark/real-person/assets/{asset_id}
+  ark_real_person_validate_sessions_create:
+    downstream_method: POST
+    downstream_path: /api/v3/ark/real-person/validate/sessions
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/ark/real-person/validate/sessions
+  ark_real_person_validate_sessions_get:
+    downstream_method: GET
+    downstream_path: /api/v3/ark/real-person/validate/sessions/{session_id}
+    default_upstream_method: GET
+    default_upstream_path: /api/v3/ark/real-person/validate/sessions/{session_id}
+  seedance_open_create_asset:
+    downstream_method: POST
+    downstream_path: /api/v3/open/CreateAsset
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/open/CreateAsset
+  seedance_open_get_asset:
+    downstream_method: POST
+    downstream_path: /api/v3/open/GetAsset
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/open/GetAsset
+
+routes:
+  - name: default-hwdrama-compatible
+    all_api_keys: true
+    channel_id: 1
+    models:
+      - "*"
+    upstream_base_url: http://ai.hwdrama.com
+    upstream_api_key_env: HWD_HWDRAMA_API_KEY
+    asset_namespace_id: hwdrama-default
+    enabled_actions:
+      - ark_assets_list
+      - ark_assets_create
+      - ark_assets_get
+      - ark_asset_groups_create
+      - ark_real_person_assets_create
+      - ark_real_person_assets_get
+      - ark_real_person_validate_sessions_create
+      - ark_real_person_validate_sessions_get
+      - seedance_open_create_asset
+      - seedance_open_get_asset
+EOF
+        chmod 600 "`$proxy_routes_file"
+    fi
+    if ! docker run --rm --entrypoint /hwdrama-proxy --env-file "`$proxy_env_file" -v "`$proxy_config_dir:/app/hwdrama-proxy:ro" "`$image" config validate --config /app/hwdrama-proxy/routes.yml --secrets /app/hwdrama-proxy/secrets.env; then
+        echo "Hwdrama proxy config validation failed. Check routes.yml and every upstream_api_key_env value in secrets.env." >&2
+        exit 1
+    fi
 fi
 
 if [ "`$hwdrama_proxy_only" != "1" ]; then
@@ -291,6 +364,7 @@ if [ "`$hwdrama_proxy_enabled" = "1" ]; then
       - "127.0.0.1:`$hwdrama_proxy_port:`$hwdrama_proxy_port"
     volumes:
       - ./logs:/app/logs
+      - ./hwdrama-proxy:/app/hwdrama-proxy
     networks:
       - new-api-network
     restart: unless-stopped
@@ -370,6 +444,7 @@ services:
       - "127.0.0.1:`$hwdrama_proxy_port:`$hwdrama_proxy_port"
     volumes:
       - ./logs:/app/logs
+      - ./hwdrama-proxy:/app/hwdrama-proxy
     networks:
       - new-api-network
     restart: unless-stopped
@@ -399,6 +474,7 @@ services:
       - "127.0.0.1:`$hwdrama_proxy_port:`$hwdrama_proxy_port"
     volumes:
       - ./logs:/app/logs
+      - ./hwdrama-proxy:/app/hwdrama-proxy
     networks:
       - new-api-network
     restart: unless-stopped
@@ -444,15 +520,8 @@ proxy_cache off;
 proxy_next_upstream off;
 EOF
     sudo tee "`$nginx_locations_snippet" >/dev/null <<EOF
-location = /api/v3/ark/assets { include `$nginx_common_snippet; }
-location = /api/v3/ark/assets/groups { include `$nginx_common_snippet; }
-location ~ ^/api/v3/ark/assets/[^/]+\$ { include `$nginx_common_snippet; }
-location = /api/v3/ark/real-person/assets { include `$nginx_common_snippet; }
-location ~ ^/api/v3/ark/real-person/assets/[^/]+\$ { include `$nginx_common_snippet; }
-location = /api/v3/ark/real-person/validate/sessions { include `$nginx_common_snippet; }
-location ~ ^/api/v3/ark/real-person/validate/sessions/[^/]+\$ { include `$nginx_common_snippet; }
-location = /api/v3/open/CreateAsset { include `$nginx_common_snippet; }
-location = /api/v3/open/GetAsset { include `$nginx_common_snippet; }
+location ^~ /api/v3/ark/ { include `$nginx_common_snippet; }
+location ^~ /api/v3/open/ { include `$nginx_common_snippet; }
 EOF
     if ! sudo grep -q "hwdrama-proxy-locations.conf" "`$nginx_site"; then
         tmp_nginx="`$(mktemp)"

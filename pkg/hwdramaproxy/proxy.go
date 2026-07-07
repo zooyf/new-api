@@ -1,12 +1,14 @@
 package hwdramaproxy
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -15,41 +17,68 @@ import (
 )
 
 type TokenLookup func(key string) (bool, error)
+type TokenResolver func(key string) (*TokenIdentity, error)
+
+type TokenIdentity struct {
+	ID int
+}
 
 type Config struct {
-	UpstreamBaseURL string
-	UpstreamAPIKey  string
-	Timeout         time.Duration
-	TokenLookup     TokenLookup
-	Client          *http.Client
+	UpstreamBaseURL  string
+	UpstreamAPIKey   string
+	RoutesConfigPath string
+	SecretsFilePath  string
+	Timeout          time.Duration
+	TokenLookup      TokenLookup
+	TokenResolver    TokenResolver
+	Client           *http.Client
 }
 
 type Proxy struct {
-	upstream       *url.URL
-	upstreamAPIKey string
-	client         *http.Client
-	tokenLookup    TokenLookup
+	upstream         *url.URL
+	upstreamAPIKey   string
+	client           *http.Client
+	tokenResolver    TokenResolver
+	routesConfigPath string
+	secretsFilePath  string
+	runtimeRouter    atomic.Value
 }
 
 func New(config Config) (*Proxy, error) {
-	upstreamBaseURL := strings.TrimSpace(config.UpstreamBaseURL)
-	if upstreamBaseURL == "" {
-		upstreamBaseURL = "http://ai.hwdrama.com"
+	routesConfigPath := strings.TrimSpace(config.RoutesConfigPath)
+	var upstream *url.URL
+	var upstreamAPIKey string
+	if routesConfigPath == "" {
+		upstreamBaseURL := strings.TrimSpace(config.UpstreamBaseURL)
+		if upstreamBaseURL == "" {
+			upstreamBaseURL = "http://ai.hwdrama.com"
+		}
+		parsedUpstream, err := url.Parse(upstreamBaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("parse upstream base url: %w", err)
+		}
+		if parsedUpstream.Scheme == "" || parsedUpstream.Host == "" {
+			return nil, errors.New("upstream base url must include scheme and host")
+		}
+		upstream = parsedUpstream
+		upstreamAPIKey = strings.TrimSpace(config.UpstreamAPIKey)
+		if upstreamAPIKey == "" {
+			return nil, errors.New("upstream api key is required")
+		}
 	}
-	upstream, err := url.Parse(upstreamBaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse upstream base url: %w", err)
+	tokenResolver := config.TokenResolver
+	if tokenResolver == nil {
+		tokenResolver = ResolveTokenInDatabase
 	}
-	if upstream.Scheme == "" || upstream.Host == "" {
-		return nil, errors.New("upstream base url must include scheme and host")
-	}
-	upstreamAPIKey := strings.TrimSpace(config.UpstreamAPIKey)
-	if upstreamAPIKey == "" {
-		return nil, errors.New("upstream api key is required")
-	}
-	tokenLookup := config.TokenLookup
-	if tokenLookup == nil {
-		tokenLookup = TokenExistsInDatabase
+	if config.TokenLookup != nil {
+		tokenLookup := config.TokenLookup
+		tokenResolver = func(key string) (*TokenIdentity, error) {
+			exists, err := tokenLookup(key)
+			if err != nil || !exists {
+				return nil, err
+			}
+			return &TokenIdentity{}, nil
+		}
 	}
 	client := config.Client
 	if client == nil {
@@ -60,15 +89,31 @@ func New(config Config) (*Proxy, error) {
 		client = &http.Client{Timeout: timeout}
 	}
 
-	return &Proxy{
-		upstream:       upstream,
-		upstreamAPIKey: upstreamAPIKey,
-		client:         client,
-		tokenLookup:    tokenLookup,
-	}, nil
+	proxy := &Proxy{
+		upstream:         upstream,
+		upstreamAPIKey:   upstreamAPIKey,
+		client:           client,
+		tokenResolver:    tokenResolver,
+		routesConfigPath: routesConfigPath,
+		secretsFilePath:  strings.TrimSpace(config.SecretsFilePath),
+	}
+	if proxy.routesConfigPath != "" {
+		if err := proxy.ReloadRoutes(); err != nil {
+			return nil, err
+		}
+	}
+	return proxy, nil
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if p.routesConfigPath != "" {
+		p.serveDynamic(w, r)
+		return
+	}
+	p.serveLegacy(w, r)
+}
+
+func (p *Proxy) serveLegacy(w http.ResponseWriter, r *http.Request) {
 	decision := RouteDecisionFor(r.Method, r.URL.Path)
 	if !decision.PathKnown {
 		writeJSONError(w, http.StatusNotFound, "not_found", "route not found")
@@ -84,23 +129,77 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusUnauthorized, "token_not_provided", "missing api key")
 		return
 	}
-	exists, err := p.tokenLookup(key)
+	token, err := p.tokenResolver(key)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "database_error", "database error")
 		return
 	}
-	if !exists {
+	if token == nil {
 		writeJSONError(w, http.StatusUnauthorized, "token_invalid", "invalid api key")
 		return
 	}
 
-	p.proxyRequest(w, r)
+	p.proxyRequest(w, r, r.Method, p.upstream, r.URL.Path, p.upstreamAPIKey)
 }
 
-func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request) {
+func (p *Proxy) serveDynamic(w http.ResponseWriter, r *http.Request) {
+	router := p.CurrentRouter()
+	if router == nil {
+		writeJSONError(w, http.StatusInternalServerError, "configuration_error", "routes config is not loaded")
+		return
+	}
+	action, decision := router.LookupAction(r.Method, r.URL.Path)
+	if !decision.PathKnown {
+		writeJSONError(w, http.StatusNotFound, "not_found", "route not found")
+		return
+	}
+	if !decision.MethodAllowed {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
+	key, ok := NormalizeAPIKey(r.Header.Get("Authorization"))
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "token_not_provided", "missing api key")
+		return
+	}
+	token, err := p.tokenResolver(key)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "database_error", "database error")
+		return
+	}
+	if token == nil {
+		writeJSONError(w, http.StatusUnauthorized, "token_invalid", "invalid api key")
+		return
+	}
+
+	modelName, body, err := extractRequestModel(r)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_request", "failed to parse request body")
+		return
+	}
+	if body != nil {
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.ContentLength = int64(len(body))
+	}
+
+	route, ok, err := router.Match(token.ID, modelName, action)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "configuration_error", err.Error())
+		return
+	}
+	if !ok {
+		writeJSONError(w, http.StatusNotFound, "no_upstream_route", "no upstream route for api key, model, and action")
+		return
+	}
+
+	p.proxyRequest(w, r, route.UpstreamMethod, route.UpstreamBaseURL, route.UpstreamPath, route.UpstreamAPIKey)
+}
+
+func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, method string, upstream *url.URL, upstreamPath string, upstreamAPIKey string) {
 	upstreamURL := *r.URL
-	rewriteRequestURL(&upstreamURL, p.upstream)
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL.String(), r.Body)
+	rewriteRequestURL(&upstreamURL, upstream, upstreamPath)
+	req, err := http.NewRequestWithContext(r.Context(), method, upstreamURL.String(), r.Body)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "upstream_error", "failed to build upstream request")
 		return
@@ -108,8 +207,8 @@ func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	req.Header = r.Header.Clone()
 	req.ContentLength = r.ContentLength
 	removeHopByHopHeaders(req.Header)
-	req.Host = p.upstream.Host
-	req.Header.Set("Authorization", "Bearer "+p.upstreamAPIKey)
+	req.Host = upstream.Host
+	req.Header.Set("Authorization", "Bearer "+upstreamAPIKey)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -124,6 +223,46 @@ func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, resp.Body)
 }
 
+func (p *Proxy) ReloadRoutes() error {
+	if p.routesConfigPath == "" {
+		return nil
+	}
+	config, err := LoadRoutesConfig(p.routesConfigPath)
+	if err != nil {
+		return fmt.Errorf("load routes config: %w", err)
+	}
+	secrets, err := LoadSecretStore(p.secretsFilePath)
+	if err != nil {
+		return fmt.Errorf("load proxy secrets: %w", err)
+	}
+	router, err := BuildRuntimeRouter(config, secrets.Lookup)
+	if err != nil {
+		return err
+	}
+	p.runtimeRouter.Store(router)
+	return nil
+}
+
+func (p *Proxy) CurrentRouter() *RuntimeRouter {
+	if p == nil {
+		return nil
+	}
+	value := p.runtimeRouter.Load()
+	if value == nil {
+		return nil
+	}
+	router, _ := value.(*RuntimeRouter)
+	return router
+}
+
+func (p *Proxy) ConfigVersion() string {
+	router := p.CurrentRouter()
+	if router == nil {
+		return "legacy"
+	}
+	return router.Version()
+}
+
 type RouteDecision struct {
 	PathKnown     bool
 	MethodAllowed bool
@@ -132,12 +271,12 @@ type RouteDecision struct {
 func RouteDecisionFor(method string, path string) RouteDecision {
 	method = strings.ToUpper(method)
 	exactRoutes := map[string]map[string]bool{
-		"/api/v3/ark/assets":                         {"GET": true, "POST": true},
-		"/api/v3/ark/assets/groups":                  {"POST": true},
-		"/api/v3/ark/real-person/assets":             {"POST": true},
-		"/api/v3/ark/real-person/validate/sessions":  {"POST": true},
-		"/api/v3/open/CreateAsset":                   {"POST": true},
-		"/api/v3/open/GetAsset":                      {"POST": true},
+		"/api/v3/ark/assets":                        {"GET": true, "POST": true},
+		"/api/v3/ark/assets/groups":                 {"POST": true},
+		"/api/v3/ark/real-person/assets":            {"POST": true},
+		"/api/v3/ark/real-person/validate/sessions": {"POST": true},
+		"/api/v3/open/CreateAsset":                  {"POST": true},
+		"/api/v3/open/GetAsset":                     {"POST": true},
 	}
 	if methods, ok := exactRoutes[path]; ok {
 		return RouteDecision{
@@ -179,15 +318,23 @@ func NormalizeAPIKey(authHeader string) (string, bool) {
 	return key, true
 }
 
-func TokenExistsInDatabase(key string) (bool, error) {
-	_, err := model.GetTokenByKey(key, true)
+func ResolveTokenInDatabase(key string) (*TokenIdentity, error) {
+	token, err := model.GetTokenByKey(key, true)
 	if err == nil {
-		return true, nil
+		return &TokenIdentity{ID: token.Id}, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return false, nil
+		return nil, nil
 	}
-	return false, err
+	return nil, err
+}
+
+func TokenExistsInDatabase(key string) (bool, error) {
+	token, err := ResolveTokenInDatabase(key)
+	if err != nil {
+		return false, err
+	}
+	return token != nil, nil
 }
 
 func hasSinglePathSegmentAfterPrefix(path string, prefix string) bool {
@@ -198,16 +345,42 @@ func hasSinglePathSegmentAfterPrefix(path string, prefix string) bool {
 	return rest != "" && !strings.Contains(rest, "/")
 }
 
-func rewriteRequestURL(reqURL *url.URL, target *url.URL) {
+func rewriteRequestURL(reqURL *url.URL, target *url.URL, upstreamPath string) {
 	targetQuery := target.RawQuery
 	reqURL.Scheme = target.Scheme
 	reqURL.Host = target.Host
-	reqURL.Path = singleJoiningSlash(target.Path, reqURL.Path)
+	reqURL.Path = singleJoiningSlash(target.Path, upstreamPath)
 	if targetQuery == "" || reqURL.RawQuery == "" {
 		reqURL.RawQuery = targetQuery + reqURL.RawQuery
 	} else {
 		reqURL.RawQuery = targetQuery + "&" + reqURL.RawQuery
 	}
+}
+
+type requestModelPayload struct {
+	Model string `json:"model"`
+}
+
+func extractRequestModel(r *http.Request) (string, []byte, error) {
+	modelName := strings.TrimSpace(r.URL.Query().Get("model"))
+	if r.Body == nil {
+		return modelName, nil, nil
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return modelName, body, nil
+	}
+	var payload requestModelPayload
+	if err := common.Unmarshal(body, &payload); err != nil {
+		return "", body, err
+	}
+	if strings.TrimSpace(payload.Model) != "" {
+		modelName = strings.TrimSpace(payload.Model)
+	}
+	return modelName, body, nil
 }
 
 func singleJoiningSlash(a string, b string) string {

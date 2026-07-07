@@ -110,6 +110,74 @@ func TestProxyPassesThroughAllowedRequest(t *testing.T) {
 	assert.JSONEq(t, `{"ok":true}`, resp.Body.String())
 }
 
+func TestProxyUsesDynamicRouteConfig(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		assert.Equal(t, "/v1/assets/create", r.URL.Path)
+		assert.Equal(t, "q=1", r.URL.RawQuery)
+		assert.Equal(t, "Bearer dynamic-upstream-key", r.Header.Get("Authorization"))
+		assert.JSONEq(t, `{"model":"doubao-seedance-2-0-fast-filter-off","url":"https://example.com/a.jpg"}`, string(body))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"asset-1"}`))
+	}))
+	defer upstream.Close()
+
+	configPath := filepath.Join(t.TempDir(), "routes.yml")
+	config := RoutesConfig{
+		Version: 1,
+		Actions: map[string]ActionConfig{
+			"seedance_open_create_asset": {
+				DownstreamMethod:      "POST",
+				DownstreamPath:        "/api/v3/open/CreateAsset",
+				DefaultUpstreamMethod: "POST",
+				DefaultUpstreamPath:   "/api/v3/open/CreateAsset",
+			},
+		},
+		Routes: []RouteConfig{
+			{
+				Name:              "wetoken",
+				APIKeyIDs:         []int{7},
+				ChannelID:         3,
+				Models:            []string{"doubao-seedance-2-0-fast-filter-off"},
+				UpstreamBaseURL:   upstream.URL,
+				UpstreamAPIKeyEnv: "HWD_TEST_UPSTREAM_KEY",
+				EnabledActions:    []string{"seedance_open_create_asset"},
+				UpstreamActionOverrides: map[string]UpstreamActionConfig{
+					"seedance_open_create_asset": {
+						UpstreamMethod: "POST",
+						UpstreamPath:   "/v1/assets/create",
+					},
+				},
+			},
+		},
+	}
+	require.NoError(t, SaveRoutesConfig(configPath, &config))
+	t.Setenv("HWD_TEST_UPSTREAM_KEY", "dynamic-upstream-key")
+
+	proxy, err := New(Config{
+		RoutesConfigPath: configPath,
+		UpstreamBaseURL:  "://legacy-value-is-ignored-in-dynamic-mode",
+		TokenResolver: func(key string) (*TokenIdentity, error) {
+			assert.Equal(t, "clientkey", key)
+			return &TokenIdentity{ID: 7}, nil
+		},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v3/open/CreateAsset?q=1", stringsReader(`{"model":"doubao-seedance-2-0-fast-filter-off","url":"https://example.com/a.jpg"}`))
+	req.Header.Set("Authorization", "Bearer sk-clientkey")
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	proxy.ServeHTTP(resp, req)
+
+	assert.Equal(t, http.StatusCreated, resp.Code)
+	assert.JSONEq(t, `{"id":"asset-1"}`, resp.Body.String())
+}
+
 func TestProxyRejectsInvalidInputs(t *testing.T) {
 	proxy, err := New(Config{
 		UpstreamBaseURL: "http://example.com",

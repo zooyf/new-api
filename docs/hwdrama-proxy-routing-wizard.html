@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hwdrama Proxy 配置向导与动态路由方案</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f7fb;
+        --panel: #ffffff;
+        --panel-soft: #f8fafc;
+        --text: #172033;
+        --muted: #64748b;
+        --line: #dbe4ef;
+        --brand: #1463ff;
+        --brand-soft: #e8f0ff;
+        --green: #16a34a;
+        --green-soft: #e9f8ef;
+        --amber: #d97706;
+        --amber-soft: #fff4df;
+        --red: #dc2626;
+        --red-soft: #fff0f0;
+        --code-bg: #101827;
+        --code-text: #e5ecff;
+        --shadow: 0 18px 45px rgba(21, 36, 66, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 12% 0%, rgba(20, 99, 255, 0.1), transparent 34rem),
+          radial-gradient(circle at 95% 8%, rgba(22, 163, 74, 0.08), transparent 28rem),
+          var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "Microsoft YaHei", "PingFang SC", sans-serif;
+        line-height: 1.68;
+      }
+
+      .page {
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 44px 0 72px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 24px;
+        align-items: stretch;
+        margin-bottom: 28px;
+      }
+
+      .hero-main,
+      .hero-side,
+      .section {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(219, 228, 239, 0.8);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+      }
+
+      .hero-main {
+        padding: 34px 36px;
+      }
+
+      .hero-side {
+        padding: 24px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 10px;
+        border: 1px solid #bdd2ff;
+        border-radius: 999px;
+        background: var(--brand-soft);
+        color: #0d47ba;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 18px 0 12px;
+        font-size: clamp(34px, 5vw, 56px);
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin: 0 0 16px;
+        font-size: 24px;
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        font-size: 17px;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 0 0 14px;
+      }
+
+      .lead {
+        max-width: 780px;
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .section {
+        margin-top: 24px;
+        padding: 28px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .grid.cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .grid.cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .mini-card {
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel-soft);
+      }
+
+      .mini-card strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 15px;
+      }
+
+      .mini-card span,
+      .muted {
+        color: var(--muted);
+      }
+
+      .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 9px;
+        border-radius: 999px;
+        background: var(--panel-soft);
+        border: 1px solid var(--line);
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .badge.blue {
+        background: var(--brand-soft);
+        border-color: #bdd2ff;
+        color: #0d47ba;
+      }
+
+      .badge.green {
+        background: var(--green-soft);
+        border-color: #c2efcf;
+        color: #166534;
+      }
+
+      .badge.amber {
+        background: var(--amber-soft);
+        border-color: #fed7aa;
+        color: #92400e;
+      }
+
+      .callout {
+        padding: 16px 18px;
+        border-left: 4px solid var(--brand);
+        border-radius: 12px;
+        background: var(--brand-soft);
+        color: #17336f;
+      }
+
+      .warning {
+        border-left-color: var(--amber);
+        background: var(--amber-soft);
+        color: #713f12;
+      }
+
+      pre {
+        overflow: auto;
+        margin: 14px 0 0;
+        padding: 18px;
+        border-radius: 12px;
+        background: var(--code-bg);
+        color: var(--code-text);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      code {
+        font-family:
+          "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+          monospace;
+      }
+
+      .inline-code {
+        padding: 2px 5px;
+        border-radius: 6px;
+        background: #eef2f7;
+        color: #0f172a;
+        font-size: 0.92em;
+      }
+
+      .mermaid-wrap {
+        overflow: auto;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #ffffff;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f1f5f9;
+        color: #334155;
+        font-size: 13px;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      ul,
+      ol {
+        margin: 0;
+        padding-left: 20px;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      .steps {
+        counter-reset: step;
+        display: grid;
+        gap: 12px;
+        padding: 0;
+        list-style: none;
+      }
+
+      .steps li {
+        counter-increment: step;
+        position: relative;
+        min-height: 44px;
+        padding: 12px 14px 12px 56px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel-soft);
+      }
+
+      .steps li::before {
+        content: counter(step);
+        position: absolute;
+        left: 14px;
+        top: 12px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--brand);
+        color: white;
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .footer {
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 13px;
+        text-align: center;
+      }
+
+      @media (max-width: 900px) {
+        .hero,
+        .grid.cols-2,
+        .grid.cols-3 {
+          grid-template-columns: 1fr;
+        }
+
+        .page {
+          width: min(100% - 24px, 1180px);
+          padding-top: 24px;
+        }
+
+        .hero-main,
+        .hero-side,
+        .section {
+          padding: 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="hero-main">
+          <span class="eyebrow">Hwdrama Proxy Routing</span>
+          <h1>配置向导与动态路由方案</h1>
+          <p class="lead">
+            本文记录素材接口透传服务的配置模型、wizard 生成配置的方式、运行时如何从客户请求匹配 action，
+            以及如何精确路由到对应上游供应商。
+          </p>
+          <div class="badge-row">
+            <span class="badge blue">Nginx 固定客户入口</span>
+            <span class="badge green">Action 字典集中定义</span>
+            <span class="badge">Route 按 key/model/action 匹配</span>
+            <span class="badge amber">配置成功后自动 reload</span>
+          </div>
+        </div>
+        <aside class="hero-side">
+          <h3>核心公式</h3>
+          <p class="muted">请求进入 proxy 后，先由客户侧 method/path 反查 action，再用稳定 ID 精确命中 route。</p>
+          <pre><code>action_key =
+  lookup(method + path)
+
+route =
+  api_key_id + model + action_key</code></pre>
+        </aside>
+      </section>
+
+      <section class="section">
+        <h2>设计边界</h2>
+        <div class="grid cols-3">
+          <div class="mini-card">
+            <strong>Nginx</strong>
+            <span>只负责把固定客户入口转发到 <code class="inline-code">hwdrama-proxy</code>，不表达上游差异。</span>
+          </div>
+          <div class="mini-card">
+            <strong>Actions 字典</strong>
+            <span>定义客户侧 endpoint 和默认上游 endpoint，避免每条 route 重复录入 downstream。</span>
+          </div>
+          <div class="mini-card">
+            <strong>Routes</strong>
+            <span>定义哪个 API Key、模型、动作应该转给哪个上游，以及必要的上游 path override。</span>
+          </div>
+          <div class="mini-card">
+            <strong>兼容默认路由</strong>
+            <span>可用 <code class="inline-code">all_api_keys: true</code> 保持“任意有效 key 都能透传”的旧行为。</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>推荐配置结构</h2>
+        <p class="muted">
+          配置文件建议放在 <code class="inline-code">/opt/new-api/hwdrama-proxy-routes.yml</code>。
+          密钥只通过环境变量引用，不进入 YAML。
+        </p>
+        <pre><code>version: 1
+
+actions:
+  seedance_open_create_asset:
+    downstream_method: POST
+    downstream_path: /api/v3/open/CreateAsset
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/open/CreateAsset
+
+  seedance_open_get_asset:
+    downstream_method: POST
+    downstream_path: /api/v3/open/GetAsset
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/open/GetAsset
+
+routes:
+  - name: default-hwdrama-compatible
+    all_api_keys: true
+    channel_id: 1
+    models:
+      - "*"
+    upstream_base_url: http://ai.hwdrama.com
+    upstream_api_key_env: HWD_HWDRAMA_API_KEY
+    asset_namespace_id: hwdrama-default
+    enabled_actions:
+      - seedance_open_create_asset
+      - seedance_open_get_asset
+
+  - name: wetoken-seedance-oversea
+    api_key_ids: [7]
+    channel_id: 3
+    models:
+      - doubao-seedance-2-0-fast-filter-off
+    upstream_base_url: https://asset.wetoken.ai
+    upstream_api_key_env: HWD_WETOKEN_API_KEY
+    asset_namespace_id: byteplus-oversea-main
+    enabled_actions:
+      - seedance_open_create_asset
+      - seedance_open_get_asset</code></pre>
+      </section>
+
+      <section class="section">
+        <h2>带 Override 的例子</h2>
+        <p class="muted">
+          如果某个上游的真实路径不同，只覆盖上游 method/path。客户侧接口仍然保持不变，不需要修改 Nginx。
+        </p>
+        <pre><code>version: 1
+
+actions:
+  seedance_open_create_asset:
+    downstream_method: POST
+    downstream_path: /api/v3/open/CreateAsset
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/open/CreateAsset
+
+  seedance_open_get_asset:
+    downstream_method: POST
+    downstream_path: /api/v3/open/GetAsset
+    default_upstream_method: POST
+    default_upstream_path: /api/v3/open/GetAsset
+
+routes:
+  - name: supplier-x-seedance-oversea
+    api_key_ids:
+      - 11
+    channel_id: 8
+    models:
+      - doubao-seedance-2-0-fast-filter-off
+      - doubao-seedance-2-0-filter-off
+    upstream_base_url: https://supplier-x.example.com
+    upstream_api_key_env: HWD_SUPPLIER_X_API_KEY
+    asset_namespace_id: supplier-x-oversea
+    enabled_actions:
+      - seedance_open_create_asset
+      - seedance_open_get_asset
+    upstream_action_overrides:
+      seedance_open_create_asset:
+        upstream_method: POST
+        upstream_path: /v1/assets/create
+      seedance_open_get_asset:
+        upstream_method: POST
+        upstream_path: /v1/assets/query</code></pre>
+      </section>
+
+      <section class="section">
+        <h2>配置加载与热更新流程</h2>
+        <div class="mermaid-wrap">
+          <pre class="mermaid">
+flowchart TD
+    A["管理员运行 wizard"] --> B["选择 API Key、Channel、Models、Actions"]
+    B --> C["wizard 查询 new-api 数据库"]
+    C --> C1["tokens.id / token name / group"]
+    C --> C2["channels.id / channel name / base_url / models"]
+    C1 --> D["生成 routes 配置"]
+    C2 --> D
+    D --> E["写入临时配置文件"]
+    E --> F["validate 配置"]
+    F -->|失败| F1["拒绝写入，显示错误"]
+    F -->|成功| G["原子替换 hwdrama-proxy-routes.yml"]
+    G --> H["wizard 调用本机 reload"]
+    H --> I["hwdrama-proxy 重新加载配置"]
+    I --> J["构建内存路由表"]
+    J --> J1["action 索引: downstream_method + downstream_path -> action_key"]
+    J --> J2["route 索引: api_key_id + model + action_key -> route"]
+    J --> J3["校验无重复、无歧义"]
+          </pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>请求路由与透传流程</h2>
+        <div class="mermaid-wrap">
+          <pre class="mermaid">
+flowchart TD
+    A["客户请求 llm.ai.nexus-reach.com"] --> B["Nginx 固定拦截素材接口"]
+    B --> C["转发到 hwdrama-proxy"]
+    C --> D["根据 method + path 查 action"]
+    D -->|找不到| D1["404: action not found"]
+    D -->|method 不允许| D2["405: method not allowed"]
+    D -->|命中| E["得到 action_key"]
+    E --> F["读取 Authorization"]
+    F -->|缺失或格式错误| F1["401: missing api key"]
+    F --> G["归一化 sk-xxx"]
+    G --> H["查 new-api tokens 表"]
+    H -->|不存在或软删除| H1["401: invalid api key"]
+    H -->|存在| I["得到 api_key_id"]
+    I --> J["从请求中读取 model"]
+    J -->|缺失且 route 需要 model| J1["400/404: model required or no route"]
+    J --> K["用 api_key_id + model + action_key 匹配 route"]
+    K -->|无匹配| K1["404: no upstream route"]
+    K -->|多个匹配| K2["500: ambiguous route, 配置错误"]
+    K -->|唯一命中| L["得到 route"]
+    L --> M["决定上游地址"]
+    M --> M1["upstream_base_url"]
+    M --> M2["action 默认 upstream_path"]
+    M --> M3["route 的 upstream_action_overrides 可覆盖 path/method"]
+    M1 --> N["构造上游请求"]
+    M2 --> N
+    M3 --> N
+    N --> O["覆盖 Authorization 为上游 API Key"]
+    O --> P["保留业务 Header、Query、Body"]
+    P --> Q["请求上游供应商"]
+    Q --> R["透传上游状态码、响应头、响应体"]
+    R --> S["返回客户"]
+          </pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Wizard 功能规划</h2>
+        <div class="grid cols-2">
+          <div>
+            <h3>建议命令</h3>
+            <pre><code>/hwdrama-proxy config wizard
+/hwdrama-proxy config validate
+/hwdrama-proxy config reload
+/hwdrama-proxy config action add
+/hwdrama-proxy config action list
+/hwdrama-proxy config route clone
+/hwdrama-proxy config list-tokens
+/hwdrama-proxy config list-channels</code></pre>
+          </div>
+          <div>
+            <h3>交互步骤</h3>
+            <ol class="steps">
+              <li>选择或新增 action，客户侧 endpoint 只在 action 字典中录入一次。</li>
+              <li>从数据库选择 API Key，wizard 自动写入 <code class="inline-code">tokens.id</code>。</li>
+              <li>从数据库选择渠道，默认带出 <code class="inline-code">channel_id</code> 和 <code class="inline-code">base_url</code>。</li>
+              <li>从渠道模型列表中选择模型，必要时允许 <code class="inline-code">*</code>。</li>
+              <li>填写上游 key 的环境变量名和 <code class="inline-code">asset_namespace_id</code>。</li>
+              <li>只有上游路径不一致时才填写 override。</li>
+              <li>预览 diff，校验成功后原子写入并自动 reload。</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>校验规则</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>规则</th>
+              <th>目的</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>downstream_method + downstream_path</code> 只能对应一个 action</td>
+              <td>保证 Nginx 转发来的请求能唯一反查 action。</td>
+            </tr>
+            <tr>
+              <td><code>api_key_id + model + action_key</code> 只能命中一个 route</td>
+              <td>避免同一个请求不知道该转发到哪个上游。</td>
+            </tr>
+            <tr>
+              <td><code>api_key_ids</code> 必须存在且未软删除</td>
+              <td>配置使用稳定 ID，不依赖可改名的 token name。</td>
+            </tr>
+            <tr>
+              <td><code>channel_id</code> 必须存在</td>
+              <td>保留与 new-api 渠道配置的对应关系，方便审计和排障。</td>
+            </tr>
+            <tr>
+              <td><code>upstream_path</code> 只能是 path，不能是完整 URL</td>
+              <td>避免绕过 <code class="inline-code">upstream_base_url</code>。</td>
+            </tr>
+            <tr>
+              <td>密钥只允许通过 <code>upstream_api_key_env</code> 引用</td>
+              <td>避免真实上游密钥进入配置文件、仓库或日志。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section">
+        <h2>热加载策略</h2>
+        <div class="callout">
+          wizard 写入新配置后，调用只监听本机的 reload 接口，例如
+          <code class="inline-code">POST http://127.0.0.1:3001/-/reload</code>。
+          proxy 校验新配置成功后原子替换内存路由表；失败时继续使用旧配置。
+        </div>
+        <div class="callout warning" style="margin-top: 14px">
+          <strong>注意：</strong>
+          已在处理中的请求继续使用旧路由，新请求使用新路由。新增客户侧 downstream 入口时仍需要同步 Nginx；
+          仅修改上游路径、key、模型、渠道、namespace 时不需要改 Nginx。
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>最终效果</h2>
+        <div class="grid cols-3">
+          <div class="mini-card">
+            <strong>少录入</strong>
+            <span>客户侧 endpoint 只在 actions 字典录一次，route 只引用 action。</span>
+          </div>
+          <div class="mini-card">
+            <strong>可扩展</strong>
+            <span>不同上游路径用 override 表达，不改客户接口。</span>
+          </div>
+          <div class="mini-card">
+            <strong>可运维</strong>
+            <span>wizard 自动查库、生成、校验、写入、reload，减少手工配置错误。</span>
+          </div>
+        </div>
+      </section>
+
+      <p class="footer">Last updated: 2026-07-06</p>
+    </main>
+
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({
+        startOnLoad: true,
+        securityLevel: "strict",
+        theme: "base",
+        themeVariables: {
+          primaryColor: "#e8f0ff",
+          primaryBorderColor: "#1463ff",
+          primaryTextColor: "#172033",
+          lineColor: "#64748b",
+          secondaryColor: "#e9f8ef",
+          tertiaryColor: "#f8fafc",
+          fontFamily:
+            "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Microsoft YaHei, sans-serif"
+        }
+      });
+    </script>
+  </body>
+</html>

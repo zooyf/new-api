@@ -1,0 +1,147 @@
+package hwdramaproxy
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestRoutesConfigValidateRejectsDuplicateActionEndpoint(t *testing.T) {
+	config := sampleRoutesConfig()
+	config.Actions["duplicate"] = ActionConfig{
+		DownstreamMethod:      "POST",
+		DownstreamPath:        "/api/v3/open/CreateAsset",
+		DefaultUpstreamMethod: "POST",
+		DefaultUpstreamPath:   "/v1/assets/create",
+	}
+
+	err := config.Validate(func(string) string { return "upstream-key" })
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "share downstream endpoint")
+}
+
+func TestRoutesConfigValidateRejectsDuplicateRouteMatch(t *testing.T) {
+	config := sampleRoutesConfig()
+	config.Routes = append(config.Routes, RouteConfig{
+		Name:              "duplicate-route",
+		APIKeyIDs:         []int{7},
+		ChannelID:         4,
+		Models:            []string{"doubao-seedance-2-0-fast-filter-off"},
+		UpstreamBaseURL:   "https://other.example.com",
+		UpstreamAPIKeyEnv: "HWD_OTHER_API_KEY",
+		EnabledActions:    []string{"seedance_open_create_asset"},
+	})
+
+	err := config.Validate(func(string) string { return "upstream-key" })
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "both match")
+}
+
+func TestRoutesConfigValidateRejectsFullUpstreamURL(t *testing.T) {
+	config := sampleRoutesConfig()
+	config.Routes[0].UpstreamActionOverrides = map[string]UpstreamActionConfig{
+		"seedance_open_create_asset": {
+			UpstreamMethod: "POST",
+			UpstreamPath:   "https://evil.example.com/v1/assets/create",
+		},
+	}
+
+	err := config.Validate(func(string) string { return "upstream-key" })
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be a path")
+}
+
+func TestRuntimeRouterMatchesExactModelBeforeWildcard(t *testing.T) {
+	config := sampleRoutesConfig()
+	config.Routes = append(config.Routes, RouteConfig{
+		Name:              "wildcard-route",
+		APIKeyIDs:         []int{7},
+		ChannelID:         4,
+		Models:            []string{WildcardModel},
+		UpstreamBaseURL:   "https://wildcard.example.com",
+		UpstreamAPIKeyEnv: "HWD_WILDCARD_API_KEY",
+		EnabledActions:    []string{"seedance_open_create_asset"},
+	})
+	router, err := BuildRuntimeRouter(config, func(string) string { return "upstream-key" })
+	require.NoError(t, err)
+
+	action, decision := router.LookupAction("POST", "/api/v3/open/CreateAsset")
+	require.True(t, decision.MethodAllowed)
+	match, ok, err := router.Match(7, "doubao-seedance-2-0-fast-filter-off", action)
+
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "wetoken-seedance-oversea", match.RouteName)
+	assert.Equal(t, "https://wetoken.ai", match.UpstreamBaseURL.String())
+}
+
+func TestRuntimeRouterAppliesUpstreamOverrideAndPathParams(t *testing.T) {
+	config := &RoutesConfig{
+		Version: 1,
+		Actions: map[string]ActionConfig{
+			"get_asset": {
+				DownstreamMethod:      "GET",
+				DownstreamPath:        "/api/v3/ark/assets/{asset_id}",
+				DefaultUpstreamMethod: "GET",
+				DefaultUpstreamPath:   "/api/v3/ark/assets/{asset_id}",
+			},
+		},
+		Routes: []RouteConfig{
+			{
+				Name:              "supplier-x",
+				APIKeyIDs:         []int{11},
+				ChannelID:         8,
+				Models:            []string{WildcardModel},
+				UpstreamBaseURL:   "https://supplier.example.com",
+				UpstreamAPIKeyEnv: "HWD_SUPPLIER_API_KEY",
+				EnabledActions:    []string{"get_asset"},
+				UpstreamActionOverrides: map[string]UpstreamActionConfig{
+					"get_asset": {
+						UpstreamMethod: "POST",
+						UpstreamPath:   "/v1/assets/{asset_id}/query",
+					},
+				},
+			},
+		},
+	}
+	router, err := BuildRuntimeRouter(config, func(string) string { return "upstream-key" })
+	require.NoError(t, err)
+
+	action, decision := router.LookupAction("GET", "/api/v3/ark/assets/asset-123")
+	require.True(t, decision.MethodAllowed)
+	match, ok, err := router.Match(11, "", action)
+
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "POST", match.UpstreamMethod)
+	assert.Equal(t, "/v1/assets/asset-123/query", match.UpstreamPath)
+}
+
+func sampleRoutesConfig() *RoutesConfig {
+	return &RoutesConfig{
+		Version: 1,
+		Actions: map[string]ActionConfig{
+			"seedance_open_create_asset": {
+				DownstreamMethod:      "POST",
+				DownstreamPath:        "/api/v3/open/CreateAsset",
+				DefaultUpstreamMethod: "POST",
+				DefaultUpstreamPath:   "/api/v3/open/CreateAsset",
+			},
+		},
+		Routes: []RouteConfig{
+			{
+				Name:              "wetoken-seedance-oversea",
+				APIKeyIDs:         []int{7},
+				ChannelID:         3,
+				Models:            []string{"doubao-seedance-2-0-fast-filter-off"},
+				UpstreamBaseURL:   "https://wetoken.ai",
+				UpstreamAPIKeyEnv: "HWD_WETOKEN_API_KEY",
+				EnabledActions:    []string{"seedance_open_create_asset"},
+			},
+		},
+	}
+}
