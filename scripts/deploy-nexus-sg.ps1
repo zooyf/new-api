@@ -3,16 +3,18 @@
 Deploy the current new-api checkout to the production nexus-sg server.
 
 .DESCRIPTION
-This script builds a Docker image from the current working tree, uploads it to
-the existing /opt/new-api deployment on nexus-sg, backs up the current compose
-file, /opt/new-api/data, and PostgreSQL database, then recreates only the
-new-api application container. It does not recreate or remove database/redis
-containers or Docker volumes.
+By default this script packages the current local checkout as a source archive,
+uploads it to the existing /opt/new-api deployment on nexus-sg, builds the
+Docker image on the server, backs up the current compose file, /opt/new-api/data,
+and PostgreSQL database, then recreates only the new-api application container.
+It does not recreate or remove database/redis containers or Docker volumes.
 
 Use -Yes to skip the production confirmation prompt.
 Use -AllowDirty to deploy with tracked uncommitted changes.
 Use -HwdramaProxyOnly to deploy or update only the Hwdrama material proxy
 without recreating the running new-api application container.
+Use -LocalDockerBuild to build the Docker image locally and upload an image tar
+instead of uploading a source archive for remote build.
 Hwdrama proxy upstream routing is read only from routes.yml and secrets.env.
 #>
 
@@ -36,7 +38,9 @@ param(
     [switch]$HwdramaProxyOnly,
     [switch]$SkipNginxUpdate,
     [switch]$NoRollback,
+    [switch]$LocalDockerBuild,
     [switch]$KeepLocalImageTar,
+    [switch]$KeepLocalSourceTar,
     [switch]$Yes
 )
 
@@ -72,6 +76,46 @@ function Get-CommandOutput {
     return ($output -join "`n").Trim()
 }
 
+function New-SourceArchive {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$ArchivePath
+    )
+
+    $stageRoot = Join-Path ([IO.Path]::GetTempPath()) ("new-api-source-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
+    try {
+        $files = & git -C $SourceRoot ls-files --cached --others --exclude-standard
+        if ($LASTEXITCODE -ne 0) {
+            throw "Command failed ($LASTEXITCODE): git -C $SourceRoot ls-files --cached --others --exclude-standard"
+        }
+
+        foreach ($relativePath in $files) {
+            if ([string]::IsNullOrWhiteSpace($relativePath)) {
+                continue
+            }
+            $sourcePath = Join-Path $SourceRoot ($relativePath -replace '/', [IO.Path]::DirectorySeparatorChar)
+            if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+                continue
+            }
+            $destinationPath = Join-Path $stageRoot ($relativePath -replace '/', [IO.Path]::DirectorySeparatorChar)
+            $destinationDir = Split-Path -Parent $destinationPath
+            New-Item -ItemType Directory -Force -Path $destinationDir | Out-Null
+            Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
+        }
+
+        if (Test-Path -LiteralPath $ArchivePath) {
+            Remove-Item -LiteralPath $ArchivePath -Force
+        }
+        Invoke-External tar -cf $ArchivePath -C $stageRoot .
+    }
+    finally {
+        if (Test-Path -LiteralPath $stageRoot) {
+            Remove-Item -LiteralPath $stageRoot -Recurse -Force
+        }
+    }
+}
+
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Push-Location $RepoRoot
 try {
@@ -81,9 +125,9 @@ try {
 
     $branch = Get-CommandOutput git rev-parse --abbrev-ref HEAD
     $sha = Get-CommandOutput git rev-parse --short=12 HEAD
-    $trackedDirty = Get-CommandOutput git status --porcelain --untracked-files=no
-    if ($trackedDirty -and -not $AllowDirty) {
-        throw "Tracked files have uncommitted changes. Commit them first, or pass -AllowDirty to deploy this exact working tree."
+    $workingTreeDirty = Get-CommandOutput git status --porcelain
+    if ($workingTreeDirty -and -not $AllowDirty) {
+        throw "Working tree has uncommitted or untracked changes. Commit them first, or pass -AllowDirty to deploy this exact working tree."
     }
 
     if (-not $ImageTag) {
@@ -97,6 +141,11 @@ try {
         Write-Host "Branch: $branch"
         Write-Host "Commit: $sha"
         Write-Host "Image:  $image"
+        if ($LocalDockerBuild) {
+            Write-Host "Build:  local Docker build, upload image tar"
+        } else {
+            Write-Host "Build:  upload local source tar, build on server"
+        }
         if ($HwdramaProxyOnly) {
             Write-Host "Mode:   Hwdrama proxy only; running new-api will not be recreated"
         }
@@ -108,7 +157,8 @@ try {
 
     Write-Host "Running remote preflight checks..."
     $nginxPreflight = if ($SkipNginxUpdate) { "" } else { "; command -v nginx >/dev/null; sudo -n true; test -f /etc/nginx/sites-available/llm.ai.nexus-reach.com.conf" }
-    Invoke-Remote "set -eu; test -d '$RemoteDir'; test -f '$RemoteDir/docker-compose.yml'; command -v docker >/dev/null; command -v base64 >/dev/null; docker compose version >/dev/null$nginxPreflight"
+    $remoteBuildPreflight = if ($LocalDockerBuild) { "" } else { "; command -v tar >/dev/null" }
+    Invoke-Remote "set -eu; test -d '$RemoteDir'; test -f '$RemoteDir/docker-compose.yml'; command -v docker >/dev/null; docker compose version >/dev/null$remoteBuildPreflight$nginxPreflight"
     if ($PreflightOnly) {
         Write-Host "Preflight OK. No deployment was performed."
         return
@@ -119,25 +169,36 @@ try {
     $safeTag = $ImageTag -replace '[^A-Za-z0-9_.-]', '_'
     $localTar = Join-Path $deployDir "$safeTag.tar"
     $remoteTar = "$RemoteDir/releases/$safeTag.tar"
+    $localSourceTar = Join-Path $deployDir "$safeTag-src.tar"
+    $remoteSourceTar = "$RemoteDir/releases/$safeTag-src.tar"
 
-    Write-Host "Building Docker image $image..."
-    Invoke-External docker build --platform $Platform --pull -t $image $RepoRoot
-
-    Write-Host "Saving image to $localTar..."
-    if (Test-Path $localTar) {
-        Remove-Item -LiteralPath $localTar -Force
-    }
-    Invoke-External docker save -o $localTar $image
-
-    Write-Host "Uploading image archive to ${RemoteHost}:$remoteTar..."
     Invoke-Remote "mkdir -p '$RemoteDir/releases' '$RemoteDir/backups'"
-    Invoke-External scp $localTar "${RemoteHost}:$remoteTar"
+    if ($LocalDockerBuild) {
+        Write-Host "Building Docker image $image locally..."
+        Invoke-External docker build --platform $Platform --pull -t $image $RepoRoot
+
+        Write-Host "Saving image to $localTar..."
+        if (Test-Path $localTar) {
+            Remove-Item -LiteralPath $localTar -Force
+        }
+        Invoke-External docker save -o $localTar $image
+
+        Write-Host "Uploading image archive to ${RemoteHost}:$remoteTar..."
+        Invoke-External scp $localTar "${RemoteHost}:$remoteTar"
+    } else {
+        Write-Host "Packaging local source checkout to $localSourceTar..."
+        New-SourceArchive -SourceRoot $RepoRoot -ArchivePath $localSourceTar
+
+        Write-Host "Uploading source archive to ${RemoteHost}:$remoteSourceTar..."
+        Invoke-External scp $localSourceTar "${RemoteHost}:$remoteSourceTar"
+    }
 
     $skipBackupValue = if ($SkipBackup) { "1" } else { "0" }
     $noRollbackValue = if ($NoRollback) { "1" } else { "0" }
     $hwdramaProxyEnabledValue = if ($SkipHwdramaProxy) { "0" } else { "1" }
     $hwdramaProxyOnlyValue = if ($HwdramaProxyOnly) { "1" } else { "0" }
     $nginxUpdateEnabledValue = if ($SkipNginxUpdate) { "0" } else { "1" }
+    $localDockerBuildValue = if ($LocalDockerBuild) { "1" } else { "0" }
 
     $remoteScript = @"
 set -Eeuo pipefail
@@ -148,12 +209,16 @@ proxy_service_name="$HwdramaProxyServiceName"
 postgres_container="$PostgresContainer"
 image="$image"
 image_tar="$remoteTar"
+source_tar="$remoteSourceTar"
+safe_tag="$safeTag"
+platform="$Platform"
 health_timeout="$HealthTimeoutSeconds"
 skip_backup="$skipBackupValue"
 no_rollback="$noRollbackValue"
 hwdrama_proxy_enabled="$hwdramaProxyEnabledValue"
 hwdrama_proxy_only="$hwdramaProxyOnlyValue"
 nginx_update_enabled="$nginxUpdateEnabledValue"
+local_docker_build="$localDockerBuildValue"
 hwdrama_proxy_port="$HwdramaProxyPort"
 hwdrama_proxy_timeout="$HwdramaProxyTimeoutSeconds"
 
@@ -224,8 +289,27 @@ else
     echo "Backups skipped by request."
 fi
 
-echo "Loading image archive..."
-docker load -i "`$image_tar"
+if [ "`$local_docker_build" = "1" ]; then
+    echo "Loading image archive..."
+    docker load -i "`$image_tar"
+else
+    source_build_dir="`$remote_dir/builds/source-`$safe_tag"
+    case "`$source_build_dir" in
+        "`$remote_dir"/builds/source-*) ;;
+        *)
+            echo "Unexpected source build directory: `$source_build_dir" >&2
+            exit 1
+            ;;
+    esac
+    echo "Preparing source build directory: `$source_build_dir"
+    rm -rf "`$source_build_dir.tmp"
+    mkdir -p "`$source_build_dir.tmp"
+    tar -xf "`$source_tar" -C "`$source_build_dir.tmp"
+    rm -rf "`$source_build_dir"
+    mv "`$source_build_dir.tmp" "`$source_build_dir"
+    echo "Building Docker image on remote host: `$image"
+    docker build --platform "`$platform" --pull -t "`$image" "`$source_build_dir"
+fi
 
 app_env="`$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "`$service_name")"
 sql_dsn="`$(printf '%s\n' "`$app_env" | sed -n 's/^SQL_DSN=//p' | head -n 1)"
@@ -566,8 +650,12 @@ echo "Backup directory: `$backup_dir"
         throw "Remote deployment failed."
     }
 
-    if (-not $KeepLocalImageTar) {
-        Remove-Item -LiteralPath $localTar -Force
+    if ($LocalDockerBuild) {
+        if (-not $KeepLocalImageTar) {
+            Remove-Item -LiteralPath $localTar -Force
+        }
+    } elseif (-not $KeepLocalSourceTar) {
+        Remove-Item -LiteralPath $localSourceTar -Force
     }
 
     Write-Host "Deployment completed: $image"
