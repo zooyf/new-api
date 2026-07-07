@@ -14,9 +14,11 @@ import (
 )
 
 const (
-	submitEndpoint     = "/v1/video/generations"
-	fetchEndpointBase  = "/v1/video/generations/"
-	defaultMaxBodySize = 32 << 20
+	newAPISubmitEndpoint          = "/v1/video/generations"
+	newAPIFetchEndpointBase       = "/v1/video/generations/"
+	volcengineSubmitEndpoint      = "/api/v3/contents/generations/tasks"
+	volcengineFetchEndpointBase   = "/api/v3/contents/generations/tasks/"
+	defaultMaxBodySize            = 32 << 20
 )
 
 type reverseServer struct {
@@ -34,8 +36,10 @@ func newServer(cfg config) http.Handler {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealth)
-	mux.HandleFunc(submitEndpoint, s.handleSubmit)
-	mux.HandleFunc(fetchEndpointBase, s.handleFetch)
+	mux.HandleFunc(newAPISubmitEndpoint, s.handleSubmit)
+	mux.HandleFunc(newAPIFetchEndpointBase, s.handleFetch)
+	mux.HandleFunc(volcengineSubmitEndpoint, s.handleSubmit)
+	mux.HandleFunc(volcengineFetchEndpointBase, s.handleFetch)
 	return mux
 }
 
@@ -73,7 +77,7 @@ func (s *reverseServer) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.doUpstream(r, http.MethodPost, submitEndpoint, bytes.NewReader(upstreamBody))
+	resp, err := s.doUpstream(r, http.MethodPost, newAPISubmitEndpoint, bytes.NewReader(upstreamBody))
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "upstream_request_failed", err.Error())
 		return
@@ -105,14 +109,18 @@ func (s *reverseServer) handleFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	taskID := strings.TrimPrefix(r.URL.Path, fetchEndpointBase)
+	taskID, ok := taskIDFromPath(r.URL.Path)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "unsupported path")
+		return
+	}
 	taskID = strings.Trim(taskID, "/")
 	if taskID == "" || strings.Contains(taskID, "/") {
 		writeError(w, http.StatusBadRequest, "invalid_request", "task_id is required")
 		return
 	}
 
-	endpoint := fetchEndpointBase + url.PathEscape(taskID)
+	endpoint := newAPIFetchEndpointBase + url.PathEscape(taskID)
 	resp, err := s.doUpstream(r, http.MethodGet, endpoint, nil)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "upstream_request_failed", err.Error())
@@ -136,6 +144,15 @@ func (s *reverseServer) handleFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, volcResp)
+}
+
+func taskIDFromPath(path string) (string, bool) {
+	for _, prefix := range []string{newAPIFetchEndpointBase, volcengineFetchEndpointBase} {
+		if strings.HasPrefix(path, prefix) {
+			return strings.TrimPrefix(path, prefix), true
+		}
+	}
+	return "", false
 }
 
 func (s *reverseServer) doUpstream(src *http.Request, method string, endpoint string, body io.Reader) (*http.Response, error) {

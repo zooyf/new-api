@@ -53,6 +53,37 @@ func TestHandleSubmitForwardsAuthorizationAndConvertsResponse(t *testing.T) {
 	assert.Equal(t, "task_upstream", response["id"])
 }
 
+func TestHandleOfficialSubmitPathForwardsToNewAPIVideoEndpoint(t *testing.T) {
+	var upstreamPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamPath = r.URL.Path
+		writeJSON(w, http.StatusOK, map[string]any{"id": "task_official"})
+	}))
+	defer upstream.Close()
+
+	handler := newServer(config{
+		upstreamBaseURL: upstream.URL,
+		timeout:         10 * time.Second,
+	})
+
+	reqBody := mustMarshal(t, map[string]any{
+		"model": "doubao-seedance-2-0-fast-filter-off",
+		"content": []any{
+			map[string]any{"type": "text", "text": "generate a video"},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v3/contents/generations/tasks", strings.NewReader(string(reqBody)))
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "/v1/video/generations", upstreamPath)
+	var response map[string]any
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Equal(t, "task_official", response["id"])
+}
+
 func TestHandleFetchConvertsTaskResponse(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/v1/video/generations/task_123", r.URL.Path)
@@ -82,4 +113,38 @@ func TestHandleFetchConvertsTaskResponse(t *testing.T) {
 	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &response))
 	assert.Equal(t, "task_123", response["id"])
 	assert.Equal(t, "processing", response["status"])
+}
+
+func TestHandleOfficialFetchPathForwardsToNewAPIVideoEndpoint(t *testing.T) {
+	var upstreamPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamPath = r.URL.Path
+		writeJSON(w, http.StatusOK, map[string]any{
+			"code": "success",
+			"data": map[string]any{
+				"task_id":    "task_123",
+				"status":     "SUCCESS",
+				"result_url": "https://example.com/video.mp4",
+			},
+		})
+	}))
+	defer upstream.Close()
+
+	handler := newServer(config{
+		upstreamBaseURL: upstream.URL,
+		timeout:         10 * time.Second,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v3/contents/generations/tasks/task_123", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "/v1/video/generations/task_123", upstreamPath)
+	var response map[string]any
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Equal(t, "task_123", response["id"])
+	assert.Equal(t, "succeeded", response["status"])
+	assert.Equal(t, "https://example.com/video.mp4", response["content"].(map[string]any)["video_url"])
 }

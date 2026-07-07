@@ -16,6 +16,8 @@ without recreating the running new-api application container.
 Use -LocalDockerBuild to build the Docker image locally and upload an image tar
 instead of uploading a source archive for remote build.
 Hwdrama proxy upstream routing is read only from routes.yml and secrets.env.
+reverse-newapi-volcengine is an optional sidecar that exposes Volcengine
+Seedance task paths and forwards them to the active new-api video endpoint.
 #>
 
 [CmdletBinding()]
@@ -24,6 +26,7 @@ param(
     [string]$RemoteDir = "/opt/new-api",
     [string]$ServiceName = "new-api",
     [string]$HwdramaProxyServiceName = "hwdrama-proxy",
+    [string]$ReverseVolcengineServiceName = "reverse-newapi-volcengine",
     [string]$PostgresContainer = "new-api-postgres",
     [string]$ImageRepository = "zooyf/new-api",
     [string]$ImageTag = "",
@@ -31,10 +34,14 @@ param(
     [int]$HealthTimeoutSeconds = 180,
     [int]$HwdramaProxyPort = 3001,
     [int]$HwdramaProxyTimeoutSeconds = 600,
+    [int]$ReverseVolcenginePort = 3003,
+    [int]$ReverseVolcengineTimeoutSeconds = 600,
+    [string]$ReverseVolcengineUpstreamBaseUrl = "http://new-api-green:3000",
     [switch]$AllowDirty,
     [switch]$PreflightOnly,
     [switch]$SkipBackup,
     [switch]$SkipHwdramaProxy,
+    [switch]$SkipReverseVolcengine,
     [switch]$HwdramaProxyOnly,
     [switch]$SkipNginxUpdate,
     [switch]$NoRollback,
@@ -196,6 +203,7 @@ try {
     $skipBackupValue = if ($SkipBackup) { "1" } else { "0" }
     $noRollbackValue = if ($NoRollback) { "1" } else { "0" }
     $hwdramaProxyEnabledValue = if ($SkipHwdramaProxy) { "0" } else { "1" }
+    $reverseVolcengineEnabledValue = if ($SkipReverseVolcengine) { "0" } else { "1" }
     $hwdramaProxyOnlyValue = if ($HwdramaProxyOnly) { "1" } else { "0" }
     $nginxUpdateEnabledValue = if ($SkipNginxUpdate) { "0" } else { "1" }
     $localDockerBuildValue = if ($LocalDockerBuild) { "1" } else { "0" }
@@ -206,6 +214,7 @@ set -Eeuo pipefail
 remote_dir="$RemoteDir"
 service_name="$ServiceName"
 proxy_service_name="$HwdramaProxyServiceName"
+reverse_service_name="$ReverseVolcengineServiceName"
 postgres_container="$PostgresContainer"
 image="$image"
 image_tar="$remoteTar"
@@ -216,16 +225,22 @@ health_timeout="$HealthTimeoutSeconds"
 skip_backup="$skipBackupValue"
 no_rollback="$noRollbackValue"
 hwdrama_proxy_enabled="$hwdramaProxyEnabledValue"
+reverse_volcengine_enabled="$reverseVolcengineEnabledValue"
 hwdrama_proxy_only="$hwdramaProxyOnlyValue"
 nginx_update_enabled="$nginxUpdateEnabledValue"
 local_docker_build="$localDockerBuildValue"
 hwdrama_proxy_port="$HwdramaProxyPort"
 hwdrama_proxy_timeout="$HwdramaProxyTimeoutSeconds"
+reverse_volcengine_port="$ReverseVolcenginePort"
+reverse_volcengine_timeout="$ReverseVolcengineTimeoutSeconds"
+reverse_volcengine_upstream_base_url="$ReverseVolcengineUpstreamBaseUrl"
 
 compose_file="`$remote_dir/docker-compose.yml"
 override_file="`$remote_dir/docker-compose.deploy.override.yml"
 proxy_override_file="`$remote_dir/docker-compose.hwdrama-proxy.override.yml"
+reverse_override_file="`$remote_dir/docker-compose.reverse-volcengine.override.yml"
 proxy_env_file="`$remote_dir/hwdrama-proxy.env"
+reverse_env_file="`$remote_dir/reverse-newapi-volcengine.env"
 proxy_config_dir="`$remote_dir/hwdrama-proxy"
 proxy_routes_file="`$proxy_config_dir/routes.yml"
 proxy_secrets_file="`$proxy_config_dir/secrets.env"
@@ -253,6 +268,7 @@ if [ -z "`$previous_image" ]; then
     exit 1
 fi
 previous_proxy_image="`$(docker inspect -f '{{.Config.Image}}' "`$proxy_service_name" 2>/dev/null || true)"
+previous_reverse_image="`$(docker inspect -f '{{.Config.Image}}' "`$reverse_service_name" 2>/dev/null || true)"
 
 mkdir -p "`$backup_dir"
 echo "Backup directory: `$backup_dir"
@@ -262,6 +278,12 @@ if [ -f "`$override_file" ]; then
 fi
 if [ -f "`$proxy_override_file" ]; then
     cp "`$proxy_override_file" "`$backup_dir/docker-compose.hwdrama-proxy.override.yml"
+fi
+if [ -f "`$reverse_override_file" ]; then
+    cp "`$reverse_override_file" "`$backup_dir/docker-compose.reverse-volcengine.override.yml"
+fi
+if [ -f "`$reverse_env_file" ]; then
+    cp "`$reverse_env_file" "`$backup_dir/reverse-newapi-volcengine.env"
 fi
 if [ -d "`$proxy_config_dir" ]; then
     tar -C "`$remote_dir" -czf "`$backup_dir/hwdrama-proxy-config.tgz" hwdrama-proxy
@@ -421,6 +443,19 @@ EOF
     fi
 fi
 
+if [ "`$reverse_volcengine_enabled" = "1" ]; then
+    umask 077
+    {
+        printf 'NEW_API_BASE_URL=%s\n' "`$reverse_volcengine_upstream_base_url"
+        printf 'PORT=%s\n' "`$reverse_volcengine_port"
+        printf 'NEW_API_TIMEOUT_SECONDS=%s\n' "`$reverse_volcengine_timeout"
+        if [ -n "`$tz_value" ]; then
+            printf 'TZ=%s\n' "`$tz_value"
+        fi
+    } > "`$reverse_env_file"
+    chmod 600 "`$reverse_env_file"
+fi
+
 if [ "`$hwdrama_proxy_only" != "1" ]; then
     cat > "`$active_override_file" <<EOF
 services:
@@ -463,13 +498,50 @@ if [ "`$hwdrama_proxy_enabled" = "1" ]; then
 EOF
 fi
 
+if [ "`$reverse_volcengine_enabled" = "1" ]; then
+    cat >> "`$active_override_file" <<EOF
+  `$reverse_service_name:
+    image: `$image
+    container_name: `$reverse_service_name
+    entrypoint:
+      - /reverse-newapi-volcengine
+    env_file:
+      - ./reverse-newapi-volcengine.env
+    ports:
+      - "127.0.0.1:`$reverse_volcengine_port:`$reverse_volcengine_port"
+    networks:
+      - new-api-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O - http://localhost:`$reverse_volcengine_port/healthz | grep -q '"status":"ok"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+EOF
+fi
+
 echo "Recreating application service(s)..."
+services_to_recreate=()
+if [ "`$hwdrama_proxy_only" != "1" ]; then
+    services_to_recreate+=("`$service_name")
+fi
+if [ "`$hwdrama_proxy_enabled" = "1" ]; then
+    services_to_recreate+=("`$proxy_service_name")
+fi
+if [ "`$reverse_volcengine_enabled" = "1" ]; then
+    services_to_recreate+=("`$reverse_service_name")
+fi
+if [ "`$hwdrama_proxy_only" = "1" ] && [ "`$hwdrama_proxy_enabled" != "1" ] && [ "`$reverse_volcengine_enabled" != "1" ]; then
+    echo "No sidecar service selected for proxy-only deployment." >&2
+    exit 1
+fi
 if [ "`$hwdrama_proxy_only" = "1" ]; then
-    compose up -d --no-deps "`$proxy_service_name"
-elif [ "`$hwdrama_proxy_enabled" = "1" ]; then
-    compose up -d --no-deps "`$service_name" "`$proxy_service_name"
+    compose up -d --no-deps "`${services_to_recreate[@]}"
 else
-    compose up -d --no-deps "`$service_name"
+    compose up -d --no-deps "`${services_to_recreate[@]}"
 fi
 
 deadline=`$((SECONDS + health_timeout))
@@ -477,6 +549,7 @@ ok=0
 while [ `$SECONDS -lt `$deadline ]; do
     new_api_ok=0
     proxy_ok=0
+    reverse_ok=0
     if [ "`$hwdrama_proxy_only" = "1" ]; then
         new_api_ok=1
     elif curl -fsS http://127.0.0.1:3000/api/status 2>/dev/null | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'; then
@@ -485,7 +558,10 @@ while [ `$SECONDS -lt `$deadline ]; do
     if [ "`$hwdrama_proxy_enabled" != "1" ] || curl -fsS "http://127.0.0.1:`$hwdrama_proxy_port/healthz" 2>/dev/null | grep -q '^ok'; then
         proxy_ok=1
     fi
-    if [ "`$new_api_ok" = "1" ] && [ "`$proxy_ok" = "1" ]; then
+    if [ "`$reverse_volcengine_enabled" != "1" ] || curl -fsS "http://127.0.0.1:`$reverse_volcengine_port/healthz" 2>/dev/null | grep -q '"status":"ok"'; then
+        reverse_ok=1
+    fi
+    if [ "`$new_api_ok" = "1" ] && [ "`$proxy_ok" = "1" ] && [ "`$reverse_ok" = "1" ]; then
         ok=1
         break
     fi
@@ -494,7 +570,8 @@ while [ `$SECONDS -lt `$deadline ]; do
         health="`$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "`$service_name" 2>/dev/null || true)"
     fi
     proxy_health="`$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "`$proxy_service_name" 2>/dev/null || true)"
-    if [ "`$health" = "healthy" ] && { [ "`$hwdrama_proxy_enabled" != "1" ] || [ "`$proxy_health" = "healthy" ]; }; then
+    reverse_health="`$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "`$reverse_service_name" 2>/dev/null || true)"
+    if [ "`$health" = "healthy" ] && { [ "`$hwdrama_proxy_enabled" != "1" ] || [ "`$proxy_health" = "healthy" ]; } && { [ "`$reverse_volcengine_enabled" != "1" ] || [ "`$reverse_health" = "healthy" ]; }; then
         ok=1
         break
     fi
@@ -508,6 +585,9 @@ if [ "`$ok" != "1" ]; then
     fi
     if [ "`$hwdrama_proxy_enabled" = "1" ]; then
         docker logs --tail 120 "`$proxy_service_name" >&2 || true
+    fi
+    if [ "`$reverse_volcengine_enabled" = "1" ]; then
+        docker logs --tail 120 "`$reverse_service_name" >&2 || true
     fi
     if [ "`$no_rollback" != "1" ]; then
         if [ "`$hwdrama_proxy_only" = "1" ]; then
@@ -578,9 +658,10 @@ EOF
     exit 1
 fi
 
-if [ "`$nginx_update_enabled" = "1" ] && [ "`$hwdrama_proxy_enabled" = "1" ]; then
+if [ "`$nginx_update_enabled" = "1" ] && { [ "`$hwdrama_proxy_enabled" = "1" ] || [ "`$reverse_volcengine_enabled" = "1" ]; }; then
     nginx_site="/etc/nginx/sites-available/llm.ai.nexus-reach.com.conf"
     nginx_common_snippet="/etc/nginx/snippets/hwdrama-proxy-common.conf"
+    nginx_reverse_snippet="/etc/nginx/snippets/reverse-volcengine-common.conf"
     nginx_locations_snippet="/etc/nginx/snippets/hwdrama-proxy-locations.conf"
     nginx_backup="`$backup_dir/llm.ai.nexus-reach.com.conf"
     sudo cp "`$nginx_site" "`$nginx_backup"
@@ -603,7 +684,29 @@ proxy_request_buffering off;
 proxy_cache off;
 proxy_next_upstream off;
 EOF
+    sudo tee "`$nginx_reverse_snippet" >/dev/null <<EOF
+proxy_pass http://127.0.0.1:`$reverse_volcengine_port;
+proxy_http_version 1.1;
+proxy_set_header Host \`$host;
+proxy_set_header X-Real-IP \`$remote_addr;
+proxy_set_header X-Forwarded-For \`$proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto \`$scheme;
+proxy_set_header X-Forwarded-Host \`$host;
+proxy_set_header X-Forwarded-Port 443;
+proxy_set_header Connection "";
+client_max_body_size 512m;
+client_body_timeout 600s;
+proxy_connect_timeout 60s;
+proxy_send_timeout 3600s;
+proxy_read_timeout 3600s;
+proxy_buffering off;
+proxy_request_buffering off;
+proxy_cache off;
+proxy_next_upstream off;
+EOF
     sudo tee "`$nginx_locations_snippet" >/dev/null <<EOF
+location = /api/v3/contents/generations/tasks { include `$nginx_reverse_snippet; }
+location ^~ /api/v3/contents/generations/tasks/ { include `$nginx_reverse_snippet; }
 location ^~ /api/v3/ark/ { include `$nginx_common_snippet; }
 location ^~ /api/v3/open/ { include `$nginx_common_snippet; }
 EOF
@@ -640,6 +743,9 @@ echo "Deployment healthy."
 docker ps --filter "name=^/`$service_name`$" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
 if [ "`$hwdrama_proxy_enabled" = "1" ]; then
     docker ps --filter "name=^/`$proxy_service_name`$" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+fi
+if [ "`$reverse_volcengine_enabled" = "1" ]; then
+    docker ps --filter "name=^/`$reverse_service_name`$" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
 fi
 echo "Backup directory: `$backup_dir"
 "@

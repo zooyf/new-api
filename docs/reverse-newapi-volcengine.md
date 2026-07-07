@@ -156,3 +156,14 @@
 - 不实现任务轮询、计费、数据库写入或本地任务存储；这些能力仍由上游 new-api 负责。
 - 不实现无鉴权降级；下游未带 `Authorization` 时仍请求上游，由上游 new-api 决定是否拒绝。
 - 不修改主 new-api 服务的既有路由、适配器、计费和任务状态更新逻辑。
+
+## 生产路径
+
+服务同时支持两组入口：
+
+- 火山官方风格：`POST /api/v3/contents/generations/tasks`
+- 火山官方风格：`GET /api/v3/contents/generations/tasks/{task_id}`
+- 兼容旧入口：`POST /v1/video/generations`
+- 兼容旧入口：`GET /v1/video/generations/{task_id}`
+
+生产 Nginx 应只把火山官方风格路径转发到本服务，其余视频接口继续由主 new-api 服务处理。
