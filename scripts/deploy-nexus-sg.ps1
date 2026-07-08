@@ -751,7 +751,7 @@ echo "Backup directory: `$backup_dir"
 "@
 
     Write-Host "Deploying on remote host..."
-    $remoteScript | & ssh $RemoteHost "bash -s"
+    ($remoteScript -replace "`r`n", "`n") | & ssh $RemoteHost "bash -s"
     if ($LASTEXITCODE -ne 0) {
         throw "Remote deployment failed."
     }
