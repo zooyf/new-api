@@ -3,6 +3,285 @@
 This runbook records the known-good production test for generating a minimal
 Seedance 2.0 video from an overseas material-library asset.
 
+## Foxtoken AlbertG Filter-Off Verification
+
+This case was verified after deploying the official Seedance 2.0 completion
+billing patch.
+
+- Verification time: `2026-07-08`
+- Production image: `zooyf/new-api:nexus-20260708T034732Z-f27c7987a949`
+- Production base URL: `https://llm.ai.nexus-reach.com`
+- Token: production token name `AlbertG`, token ID `3`
+- Required token group: `AlbertG`
+- Model: `doubao-seedance-2-0-filter-off`
+- Resolution: `480p`
+- Duration: `5`
+- Ratio: `1:1`
+- `QuotaPerUnit`: `500000`
+
+Before running this case, make sure the `AlbertG` token group is usable by the
+token owner. The production issue seen during this verification was:
+
+```text
+无权访问 AlbertG 分组
+```
+
+Fix by adding `AlbertG` to `UserUsableGroups` or the corresponding special
+usable-group rule, then restart/sync the active `new-api` service.
+
+### Asset Library Proxy
+
+Downstream requests stay on the public production domain:
+
+```text
+POST https://llm.ai.nexus-reach.com/api/v3/open/CreateAsset
+POST https://llm.ai.nexus-reach.com/api/v3/open/GetAsset
+```
+
+With the `AlbertG` token, `hwdrama-proxy` routes them to:
+
+```text
+POST https://foxtoken.linkomobile.com/api/v3/open/CreateAsset
+POST https://foxtoken.linkomobile.com/api/v3/open/GetAsset
+```
+
+Known-good `CreateAsset` body:
+
+```json
+{
+  "model": "doubao-seedance-2-0-filter-off",
+  "url": "https://img.wetoken.ai/image/2026/7/6/1/7f973ca5288a4939baf0707a179b9e1d.png?x-oss-process=image/quality,q_60/format,jpg",
+  "name": "e2e-albertg-filter-off-20260708035603",
+  "AssetType": "Image",
+  "Moderation": {
+    "Strategy": "Skip"
+  }
+}
+```
+
+Result:
+
+- `CreateAsset` HTTP status: `200`
+- `CreateAsset` body: `{"id":"asset-20260708115604-8nrb2"}`
+- `GetAsset` final status: `Active`
+- Material URL for video tests: `asset://asset-20260708115604-8nrb2`
+
+### No Reference Video
+
+Downstream submit endpoint:
+
+```text
+POST https://llm.ai.nexus-reach.com/v1/video/generations
+```
+
+The selected `DoubaoVideo` channel submits to:
+
+```text
+POST https://foxtoken.linkomobile.com/api/v3/contents/generations/tasks
+```
+
+Known-good request body:
+
+```json
+{
+  "model": "doubao-seedance-2-0-filter-off",
+  "prompt": "Create a minimal 5 second image-to-video test from the reference asset. Keep the subject stable with only subtle natural motion. No camera movement, no style change, no audio.",
+  "duration": 5,
+  "resolution": "480p",
+  "ratio": "1:1",
+  "metadata": {
+    "generate_audio": false,
+    "content": [
+      {
+        "type": "image_url",
+        "role": "first_frame",
+        "image_url": {
+          "url": "asset://asset-20260708115604-8nrb2"
+        }
+      }
+    ]
+  }
+}
+```
+
+Result:
+
+- Local task ID: `task_OYShjFowuOFZI2cEoVyvDdobqwHfnijn`
+- Upstream task ID: `cgt-20260708120029-nvwww`
+- Final status: `SUCCESS`, upstream status `succeeded`
+- Content check: HTTP `200`, `Content-Type: video/mp4`, size `2064411`
+- Upstream usage: `total_tokens=50638`, `completion_tokens=50638`
+- Official price tier: `7.0 USD / 1M tokens`
+
+Billing formula:
+
+```text
+int(total_tokens / 1000000 * usd_per_m_tokens * quota_per_unit * group_ratio)
+```
+
+Billing calculation:
+
+```text
+int(50638 / 1000000 * 7.0 * 500000 * 1) = 177233 quota
+177233 / 500000 = $0.354466
+```
+
+Check the billing adjustment in `logs.other.actual_quota`. At verification
+time the `tasks.quota` field still showed the pre-charge amount, while the
+balance adjustment log contained the final calculated amount:
+
+```text
+log type: refund
+quota: 697767
+content: token重算：tokens=50638, modelRatio=3.50, groupRatio=1.00, otherMultiplier=1.0000
+other.actual_quota: 177233
+other.pre_consumed_quota: 875000
+```
+
+### With Reference Video
+
+For Seedance reference-video mode, the metadata content item must include
+`role: "reference_video"`. Without this role, the upstream rejects the request:
+
+```text
+InvalidParameter: reference media mode requires video role to be reference_video
+```
+
+Known-good request body:
+
+```json
+{
+  "model": "doubao-seedance-2-0-filter-off",
+  "prompt": "Create a minimal 5 second video using the reference video for gentle motion guidance. Keep the output stable and simple. No audio.",
+  "duration": 5,
+  "resolution": "480p",
+  "ratio": "1:1",
+  "metadata": {
+    "generate_audio": false,
+    "content": [
+      {
+        "type": "video_url",
+        "role": "reference_video",
+        "video_url": {
+          "url": "https://ark-doc.tos-ap-southeast-1.bytepluses.com/doc_video/r2v_tea_video1.mp4"
+        }
+      }
+    ]
+  }
+}
+```
+
+Result:
+
+- Local task ID: `task_PfmsLqQurcyFPKQAUd1coHpQrBS17V9O`
+- Upstream task ID: `cgt-20260708120917-2ldr2`
+- Final status: `SUCCESS`, upstream status `succeeded`
+- Content check: HTTP `200`, `Content-Type: video/mp4`, size `1240445`
+- Upstream usage: `total_tokens=100858`, `completion_tokens=100858`
+- `video_input` ratio: `0.6142857142857142`
+- Official price tier: `4.3 USD / 1M tokens`
+
+Billing calculation:
+
+```text
+int(100858 / 1000000 * 4.3 * 500000 * 1) = 216844 quota
+216844 / 500000 = $0.433688
+```
+
+Adjustment log observed:
+
+```text
+log type: refund
+quota: 320655
+content: token重算：tokens=100858, modelRatio=3.50, groupRatio=1.00, otherMultiplier=0.6143
+other.actual_quota: 216844
+other.pre_consumed_quota: 537499
+other.video_input: 0.6142857142857142
+```
+
+### Dreamina Mini Two Reference Images With Audio
+
+This case verifies that multi-image reference mode must send an explicit
+`role` for every image content item. The original request without `role`
+failed with:
+
+```text
+InvalidParameter: role must be specified for image contents
+```
+
+For two reference images, use `role: "reference_image"` on both images. Do not
+use `first_frame`/`last_frame` unless the test is specifically a strict
+start/end-frame task.
+
+Known-good request body:
+
+```json
+{
+  "model": "dreamina-seedance-2-0-mini-filter-off",
+  "prompt": "一个春天的早晨",
+  "resolution": "480p",
+  "ratio": "16:9",
+  "duration": 5,
+  "metadata": {
+    "generate_audio": true,
+    "content": [
+      {
+        "type": "image_url",
+        "role": "reference_image",
+        "image_url": {
+          "url": "asset://asset-20260708115323-48kxb"
+        }
+      },
+      {
+        "type": "image_url",
+        "role": "reference_image",
+        "image_url": {
+          "url": "asset://asset-20260708115408-j8n6s"
+        }
+      }
+    ],
+    "duration": 5
+  }
+}
+```
+
+Result:
+
+- Local task ID: `task_hixqqcuIqPB53zSAAPCCSt3zDWFeCs4W`
+- Final status: `SUCCESS`, upstream status `succeeded`
+- Content check: HTTP `200`, `Content-Type: video/mp4`, size `1594219`
+- Upstream usage: `total_tokens=50638`, `completion_tokens=50638`
+- Official price tier: `3.5 USD / 1M tokens`
+
+Billing calculation:
+
+```text
+int(50638 / 1000000 * 3.5 * 500000 * 1) = 88616 quota
+88616 / 500000 = $0.177232
+```
+
+Adjustment log observed:
+
+```text
+log type: refund
+quota: 348884
+content: adaptor计费调整
+other.actual_quota: 88616
+other.pre_consumed_quota: 437500
+```
+
+### SQL Checks
+
+Use these queries on `nexus-sg` when validating the final billing adjustment:
+
+```bash
+docker exec new-api-postgres psql -U newapi -d newapi -tAc \
+  "select task_id,status,quota,private_data->'billing_context',data->'usage' from tasks where task_id='task_xxx';"
+
+docker exec new-api-postgres psql -U newapi -d newapi -tAc \
+  "select id,type,quota,content,other from logs where other like '%task_xxx%' order by id desc limit 5;"
+```
+
 ## Known-Good Case
 
 - Production base URL: `https://llm.ai.nexus-reach.com`
@@ -62,6 +341,7 @@ REQUEST_BODY=$(cat <<JSON
     "content": [
       {
         "type": "image_url",
+        "role": "first_frame",
         "image_url": {
           "url": "${ASSET_URL}"
         }
@@ -166,6 +446,7 @@ curl -sS -X POST "${BASE_URL}/v1/video/generations" \
       "content": [
         {
           "type": "image_url",
+          "role": "first_frame",
           "image_url": {
             "url": "asset://asset-20260704235114-x565x"
           }
@@ -216,6 +497,7 @@ $Body = @'
     "content": [
       {
         "type": "image_url",
+        "role": "first_frame",
         "image_url": {
           "url": "asset://asset-20260704235114-x565x"
         }
@@ -576,6 +858,7 @@ REQUEST_BODY=$(cat <<JSON
     "content": [
       {
         "type": "image_url",
+        "role": "first_frame",
         "image_url": {
           "url": "${IMAGE_URL}"
         }
@@ -643,6 +926,7 @@ curl -sS -X POST "${BASE_URL}/v1/video/generations" \
       "content": [
         {
           "type": "image_url",
+          "role": "first_frame",
           "image_url": {
             "url": "https://english.news.cn/20260705/26e48b12c5cd46e393a3c841724f8fff/2026070526e48b12c5cd46e393a3c841724f8fff_20260705a72e50108c95436ea94849e6c5382aaf.jpg"
           }
@@ -670,6 +954,7 @@ $Body = @'
     "content": [
       {
         "type": "image_url",
+        "role": "first_frame",
         "image_url": {
           "url": "https://english.news.cn/20260705/26e48b12c5cd46e393a3c841724f8fff/2026070526e48b12c5cd46e393a3c841724f8fff_20260705a72e50108c95436ea94849e6c5382aaf.jpg"
         }
@@ -790,6 +1075,7 @@ REQUEST_BODY=$(cat <<JSON
     "content": [
       {
         "type": "image_url",
+        "role": "first_frame",
         "image_url": {
           "url": "${IMAGE_URL}"
         }
@@ -829,6 +1115,7 @@ curl -sS -X POST "${BASE_URL}/v1/video/generations" \
       "content": [
         {
           "type": "image_url",
+          "role": "first_frame",
           "image_url": {
             "url": "https://tu.duoduocdn.com/uploads/day_260706/202607061050473326_720.jpg"
           }
@@ -859,6 +1146,7 @@ $Body = @'
     "content": [
       {
         "type": "image_url",
+        "role": "first_frame",
         "image_url": {
           "url": "https://tu.duoduocdn.com/uploads/day_260706/202607061050473326_720.jpg"
         }
