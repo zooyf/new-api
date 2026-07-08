@@ -16,16 +16,26 @@ var ModelList = []string{
 
 var ChannelName = "doubao-video"
 
-// videoPriceKey 价格表的键：输出分辨率档（is1080p/is4k 均为 false 即 480p/720p 基准档）、输入是否含视频。
+const videoInputRatioKey = "video_input"
+
 type videoPriceKey struct {
 	is1080p  bool
 	is4k     bool
 	hasVideo bool
 }
 
-// videoPriceTable 各模型在不同 (输出分辨率档, 是否含视频输入) 下的单价（元/百万 token）。
-// 其中零值键 {480p/720p, 不含视频} 为基准价，等于管理员应配置的 ModelRatio；
-// 计费时取 实际单价/基准价 作为 OtherRatio。
+// These overseas Seedance 2.0 models are billed from the USD/M-token table
+// when the async task completes. Legacy 260128 models keep the old ratio-only
+// behavior because their table values use a different pricing basis.
+var videoCompletionPriceModels = map[string]struct{}{
+	"doubao-seedance-2-0-filter-off":        {},
+	"doubao-seedance-2-0-fast-filter-off":   {},
+	"dreamina-seedance-2-0-mini-filter-off": {},
+}
+
+// videoPriceTable stores USD per 1M tokens for each output tier and whether
+// the request includes video input. The zero key is the 480p/720p image/text
+// input baseline used for pre-charge ratios.
 var videoPriceTable = map[string]map[videoPriceKey]float64{
 	"doubao-seedance-2-0-260128": {
 		{hasVideo: false}:                46.0,
@@ -41,35 +51,56 @@ var videoPriceTable = map[string]map[videoPriceKey]float64{
 	},
 	"doubao-seedance-2-0-filter-off": {
 		{hasVideo: false}:                7.0,
-		{hasVideo: true}:                 7.0,
+		{hasVideo: true}:                 4.3,
 		{is1080p: true, hasVideo: false}: 7.7,
-		{is1080p: true, hasVideo: true}:  7.7,
+		{is1080p: true, hasVideo: true}:  4.7,
 		{is4k: true, hasVideo: false}:    4.0,
-		{is4k: true, hasVideo: true}:     4.0,
+		{is4k: true, hasVideo: true}:     2.4,
 	},
 	"doubao-seedance-2-0-fast-filter-off": {
 		{hasVideo: false}: 5.6,
-		{hasVideo: true}:  5.6,
+		{hasVideo: true}:  3.3,
 	},
 	"dreamina-seedance-2-0-mini-filter-off": {
 		{hasVideo: false}: 3.5,
-		{hasVideo: true}:  3.5,
+		{hasVideo: true}:  2.1,
 	},
 }
 
-// GetVideoInputRatio 返回指定模型在给定输出分辨率/是否含视频输入下，相对基准价的计费倍率。
-// 第二个返回值表示该模型是否配置了价格表；倍率为 1.0 时调用方可忽略该 OtherRatio。
 func GetVideoInputRatio(modelName, resolution string, hasVideo bool) (float64, bool) {
 	prices, ok := videoPriceTable[modelName]
-	base := prices[videoPriceKey{}] // 零值键 = {480p/720p, 不含视频} 基准价
-	if !ok || base <= 0 {
+	if !ok {
 		return 0, false
 	}
+	base := prices[videoPriceKey{}]
+	if base <= 0 {
+		return 0, false
+	}
+
 	res := strings.ToLower(strings.TrimSpace(resolution))
 	price, ok := prices[videoPriceKey{is1080p: res == "1080p", is4k: res == "4k", hasVideo: hasVideo}]
 	if !ok {
-		// 未配置的组合（如 fast 无 1080p/4k，上游会自行报错）按基准价计费即可。
 		return 1.0, true
 	}
 	return price / base, true
+}
+
+func getVideoCompletionUSDPerMTokens(modelName string, otherRatios map[string]float64) (float64, bool) {
+	if _, ok := videoCompletionPriceModels[modelName]; !ok {
+		return 0, false
+	}
+	prices, ok := videoPriceTable[modelName]
+	if !ok {
+		return 0, false
+	}
+	basePrice := prices[videoPriceKey{}]
+	if basePrice <= 0 {
+		return 0, false
+	}
+
+	priceRatio := 1.0
+	if ratio := otherRatios[videoInputRatioKey]; ratio > 0 {
+		priceRatio = ratio
+	}
+	return basePrice * priceRatio, true
 }

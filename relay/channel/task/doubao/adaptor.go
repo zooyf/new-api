@@ -147,7 +147,26 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if !ok || ratio == 1.0 {
 		return nil
 	}
-	return map[string]float64{"video_input": ratio}
+	return map[string]float64{videoInputRatioKey: ratio}
+}
+
+func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
+	if task == nil || taskResult == nil || taskResult.TotalTokens <= 0 {
+		return 0
+	}
+	bc := task.PrivateData.BillingContext
+	if bc == nil {
+		return 0
+	}
+	modelName := bc.OriginModelName
+	if modelName == "" {
+		modelName = task.Properties.OriginModelName
+	}
+	usdPerMTokens, ok := getVideoCompletionUSDPerMTokens(modelName, bc.OtherRatios)
+	if !ok || usdPerMTokens <= 0 || bc.GroupRatio <= 0 {
+		return 0
+	}
+	return int(float64(taskResult.TotalTokens) / 1_000_000 * usdPerMTokens * common.QuotaPerUnit * bc.GroupRatio)
 }
 
 func seedanceResolution(req relaycommon.TaskSubmitReq) string {

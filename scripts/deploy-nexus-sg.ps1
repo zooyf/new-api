@@ -420,7 +420,7 @@ routes:
     channel_id: 1
     models:
       - "*"
-    upstream_base_url: http://ai.hwdrama.com
+    upstream_base_url: https://foxtoken.linkomobile.com
     upstream_api_key_env: HWD_HWDRAMA_API_KEY
     asset_namespace_id: hwdrama-default
     enabled_actions:
