@@ -1193,7 +1193,7 @@
       "post": {
         "summary": "创建视频生成任务",
         "deprecated": false,
-        "description": "提交视频生成任务，支持文生视频和图生视频。\n\n返回任务 ID，可通过 GET 接口查询任务状态。\n\n海外 Seedance 图片参考支持两种方式：metadata.content[].image_url.url 传公网 HTTP(S) 图片 URL，或传已创建素材的 asset://asset-xxx。/api/v3/contents/generations/tasks 按原生 v3 格式使用素材，请先通过对应素材接口创建后再传 asset://asset-xxx。\n",
+        "description": "提交视频生成任务，支持文生视频和图生视频。\n\n返回任务 ID，可通过 GET 接口查询任务状态。\n\nSeedance 兼容格式注意事项：输出比例请传 metadata.ratio；不要只传顶层 ratio 或 aspect_ratio。图片、视频、音频参考素材请通过 metadata.content 传入，并为每个素材显式填写 role，例如 first_frame、reference_image、reference_video、reference_audio。素材库素材请在 metadata.content[].image_url.url 中传 asset://asset-xxx。\n",
         "operationId": "createVideoGeneration",
         "tags": [
           "视频生成"
@@ -1206,32 +1206,22 @@
                 "$ref": "#/components/schemas/VideoGenerationRequest"
               },
               "example": {
-                "model": "doubao-seedance-2.0",
-                "prompt": "参考视频动作和音频节奏生成",
-                "resolution": "720p",
-                "ratio": "16:9",
+                "model": "dreamina-seedance-2-0-mini-filter-off",
+                "prompt": "一个春天的早晨，画面保持竖屏构图，轻微自然运动，无字幕。",
+                "resolution": "480p",
+                "duration": 5,
                 "metadata": {
+                  "ratio": "9:16",
+                  "generate_audio": false,
                   "content": [
                     {
-                      "type": "video_url",
-                      "video_url": {
-                        "url": "https://example.com/reference.mp4"
-                      }
-                    },
-                    {
-                      "type": "audio_url",
-                      "audio_url": {
-                        "url": "https://example.com/reference.mp3"
-                      }
-                    },
-                    {
                       "type": "image_url",
+                      "role": "first_frame",
                       "image_url": {
-                        "url": "https://example.com/reference.png"
+                        "url": "asset://asset-xxx"
                       }
                     }
-                  ],
-                  "generate_audio": true
+                  ]
                 }
               }
             }
@@ -5045,7 +5035,7 @@
       },
       "VideoGenerationRequest": {
         "type": "object",
-        "description": "统一视频生成任务请求。JSON 请求按统一视频任务参数解析；Seedance 等模型的随机种子请放在 metadata.seed，顶层 seed 不会被解析。海外 Seedance 图片参考可在 metadata.content[].image_url.url 中传公网图片 URL，或传已创建素材的 asset://asset-xxx。",
+        "description": "统一视频生成任务请求。JSON 请求按统一视频任务参数解析；Seedance 等模型的随机种子请放在 metadata.seed，顶层 seed 不会被解析。Seedance 输出比例请传 metadata.ratio；图片、视频、音频参考素材请通过 metadata.content 传入并显式填写 role。素材库素材请在 metadata.content[].image_url.url 中传 asset://asset-xxx。",
         "properties": {
           "model": {
             "type": "string",
@@ -5059,12 +5049,12 @@
           },
           "image": {
             "type": "string",
-            "description": "单张参考图片 URL（公网 HTTP(S) URL，不支持 Base64）",
+            "description": "单张参考图片 URL（公网 HTTP(S) URL，不支持 Base64）。Seedance 复杂场景不建议使用顶层 image，因为它不会自动补 role；请优先使用 metadata.content[].image_url 并显式填写 role。",
             "example": "https://example.com/image.jpg"
           },
           "images": {
             "type": "array",
-            "description": "多张参考图片 URL（公网 HTTP(S) URL，不支持 Base64）",
+            "description": "多张参考图片 URL（公网 HTTP(S) URL，不支持 Base64）。Seedance 多图参考不建议使用顶层 images，因为它不会自动补 role；请使用 metadata.content[]，每张图填写 role: reference_image。",
             "items": {
               "type": "string"
             },
@@ -5075,17 +5065,17 @@
           },
           "input_reference": {
             "type": "string",
-            "description": "参考图片 URL 别名，会按 image/images 统一处理（公网 HTTP(S) URL，不支持 Base64）",
+            "description": "参考图片 URL 别名。当前 Seedance 视频生成不建议使用该顶层字段；请改用 metadata.content[].image_url。",
             "example": "https://example.com/reference.jpg"
           },
           "material_id": {
             "type": "string",
-            "description": "平台素材 ID，仅支持具备素材库能力的渠道",
+            "description": "平台素材 ID。当前 /v1/video/generations 不直接解析该顶层字段；Seedance 素材请使用 asset://asset-xxx 放到 metadata.content[].image_url.url。",
             "example": "mat_xxxxx"
           },
           "material_ids": {
             "type": "array",
-            "description": "平台素材 ID 列表，仅支持具备素材库能力的渠道",
+            "description": "平台素材 ID 列表。当前 /v1/video/generations 不直接解析该顶层字段；Seedance 多素材请使用多个 metadata.content[] 条目，并在 url 中传 asset://asset-xxx。",
             "items": {
               "type": "string"
             },
@@ -5096,7 +5086,7 @@
           },
           "size": {
             "type": "string",
-            "description": "尺寸或 provider-specific 画幅参数，具体取值由模型/渠道决定",
+            "description": "尺寸或 provider-specific 画幅参数。Seedance 请优先使用 resolution + metadata.ratio；不要依赖 size 设置输出比例。",
             "example": "1280x720"
           },
           "resolution": {
@@ -5106,27 +5096,27 @@
           },
           "ratio": {
             "type": "string",
-            "description": "输出比例",
+            "description": "输出比例。当前 Seedance 兼容链路不会透传顶层 ratio；请在 metadata.ratio 中填写，例如 9:16。",
             "example": "16:9"
           },
           "aspect_ratio": {
             "type": "string",
-            "description": "输出比例别名",
+            "description": "输出比例别名。当前 Seedance 兼容链路不会透传顶层 aspect_ratio；请在 metadata.ratio 中填写，例如 9:16。",
             "example": "16:9"
           },
           "duration": {
             "type": "integer",
-            "description": "视频时长（秒）。部分 Seedance 渠道优先使用 seconds 或 metadata.duration。",
+            "description": "视频时长（秒），当前建议传整数秒，例如 5。",
             "example": 5
           },
           "seconds": {
             "type": "string",
-            "description": "视频时长别名（秒），部分视频渠道使用该字段。",
+            "description": "视频时长别名（秒）。当前只按整数字符串解析，例如 \"5\"；不要传 \"0.5\"。",
             "example": "5"
           },
           "metadata": {
             "type": "object",
-            "description": "模型扩展参数。Seedance 随机种子请传 metadata.seed；参考视频/音频等 provider-specific content 请传 metadata.content。海外 Seedance 图片参考仅支持公网 HTTP(S) 图片 URL 或已创建素材的 asset://asset-xxx。",
+            "description": "模型扩展参数。Seedance 输出比例请传 metadata.ratio；随机种子请传 metadata.seed；参考图片、视频、音频请传 metadata.content，并为每个素材显式填写 role。海外 Seedance 图片参考仅支持公网 HTTP(S) 图片 URL 或已创建素材的 asset://asset-xxx。",
             "additionalProperties": true,
             "properties": {
               "seed": {
@@ -5141,7 +5131,7 @@
               },
               "content": {
                 "type": "array",
-                "description": "provider-specific 多模态参考内容，如 image_url、video_url、audio_url。海外 Seedance 图片参考的 image_url.url 支持公网图片 URL 或已创建素材的 asset://asset-xxx。",
+                "description": "provider-specific 多模态参考内容，如 image_url、video_url、audio_url。Seedance 必须为素材显式填写 role：单图首帧用 first_frame，多图参考用 reference_image，参考视频用 reference_video，参考音频用 reference_audio。海外 Seedance 图片参考的 image_url.url 支持公网图片 URL 或已创建素材的 asset://asset-xxx。",
                 "items": {
                   "type": "object",
                   "additionalProperties": true
