@@ -149,6 +149,10 @@ const indexHTML = `<!doctype html>
       font-size: 11px;
       line-height: 1.35;
     }
+    .required-mark {
+      color: var(--danger);
+      font-weight: 700;
+    }
     input, select, textarea {
       width: 100%;
       border: 1px solid var(--line);
@@ -337,7 +341,7 @@ const indexHTML = `<!doctype html>
         <div class="grid management-grid">
           <form class="panel" id="org-form">
             <h3 id="org-form-title">创建组织节点</h3>
-            <label>名称 <input name="name" required></label>
+            <label><span>名称 <span class="required-mark" aria-hidden="true">*</span></span><input name="name" required></label>
             <label>编码 <input name="code"></label>
             <label>父级组织
               <select name="parent_id" data-ref-select="org_units" data-placeholder="顶层组织"></select>
@@ -356,9 +360,8 @@ const indexHTML = `<!doctype html>
             <label>默认 Policy
               <select name="default_policy_id" data-ref-select="policies" data-placeholder="不绑定，按上级继承"></select>
             </label>
-            <label>默认 new-api group
+            <label>默认 group
               <select name="default_group" data-ref-select="groups" data-placeholder="不覆盖"></select>
-              <span class="hint">来自 new-api 分组配置、用户、渠道和 abilities。</span>
             </label>
             <label>所属账号
               <select name="newapi_user_id" data-ref-select="users" data-placeholder="继承或稍后指定"></select>
@@ -386,7 +389,7 @@ const indexHTML = `<!doctype html>
         <div class="grid management-grid">
           <form class="panel" id="policy-form">
             <h3 id="policy-form-title">创建 Policy</h3>
-            <label>名称 <input name="name" required></label>
+            <label><span>名称 <span class="required-mark" aria-hidden="true">*</span></span><input name="name" required></label>
             <label>默认 group
               <select name="default_group" data-ref-select="groups" data-placeholder="不设置"></select>
             </label>
@@ -432,7 +435,7 @@ const indexHTML = `<!doctype html>
         <div class="grid management-grid">
           <form class="panel" id="key-form">
             <h3 id="key-form-title">创建企业令牌</h3>
-            <label>名称 <input name="name" required></label>
+            <label><span>名称 <span class="required-mark" aria-hidden="true">*</span></span><input name="name" required></label>
             <label>组织
               <select name="org_unit_id" data-ref-select="org_units" data-placeholder="不绑定组织"></select>
             </label>
@@ -491,7 +494,7 @@ const indexHTML = `<!doctype html>
                 <option value="cost_center">cost_center</option>
               </select>
             </label>
-            <label>范围对象
+            <label><span>范围对象 <span class="required-mark" aria-hidden="true">*</span></span>
               <select name="scope_id" id="budget-scope-id" required></select>
               <span class="hint">会根据上面的范围类型自动切换组织、企业令牌、项目或成本中心。</span>
             </label>
@@ -503,7 +506,7 @@ const indexHTML = `<!doctype html>
               <input name="period_end" type="datetime-local" data-unix-seconds="true">
               <span class="hint">留空表示长期有效，不限制结束时间。</span>
             </label>
-            <label>预算 quota <input name="budget_quota" type="number" required></label>
+            <label><span>预算 quota <span class="required-mark" aria-hidden="true">*</span></span><input name="budget_quota" type="number" required></label>
             <label>状态
               <select name="status">
                 <option value="enabled">启用</option>
@@ -575,9 +578,9 @@ const indexHTML = `<!doctype html>
         <h2>Hub 权限</h2>
         <div class="grid management-grid">
           <form class="panel" id="admin-form">
-            <h3>授权 new-api 管理员</h3>
-            <label>new-api 用户
-              <select name="newapi_user_id" id="admin-user-select" data-ref-select="users" data-placeholder="选择管理员用户" required></select>
+            <h3>授权管理员</h3>
+            <label><span>用户列表 <span class="required-mark" aria-hidden="true">*</span></span>
+              <select name="newapi_user_id" id="admin-user-select" data-ref-select="users" data-placeholder="选择用户" required></select>
             </label>
             <label>用户名 <input name="newapi_username" id="admin-username-input" readonly></label>
             <label>Hub 角色
@@ -651,10 +654,9 @@ const indexHTML = `<!doctype html>
       '正在校验管理员身份...': 'Validating administrator identity...',
       '组织架构': 'Organization structure', '创建组织节点': 'Create organization node', '名称': 'Name',
       '编码': 'Code', '父级组织': 'Parent organization', '类型': 'Type', '默认 Policy': 'Default Policy',
-      '默认 new-api group': 'Default new-api group', '所属账号': 'Account owner', '状态': 'Status',
+      '所属账号': 'Account owner', '状态': 'Status',
       '创建': 'Create', '取消编辑': 'Cancel editing', '组织列表': 'Organizations',
       '从 Hub 已有组织读取；留空表示创建顶层组织。': 'Loaded from Hub organizations; leave blank to create a root organization.',
-      '来自 new-api 分组配置、用户、渠道和 abilities。': 'Loaded from new-api groups, users, channels, and abilities.',
       'Policy 管理': 'Policy management', '创建 Policy': 'Create Policy', '默认 group': 'Default group',
       '允许模型': 'Allowed models', '禁止模型': 'Denied models', '月预算 quota': 'Monthly budget quota',
       '日预算 quota': 'Daily budget quota', '令牌默认 quota': 'Default token quota',
@@ -675,8 +677,8 @@ const indexHTML = `<!doctype html>
       '渠道': 'Channel', '全部组织': 'All organizations', '全部企业令牌': 'All enterprise tokens',
       '全部模型': 'All models', '全部渠道': 'All channels', '全部项目': 'All projects',
       '全部成本中心': 'All cost centers', '应用筛选': 'Apply filters', '清空筛选': 'Clear filters',
-      '汇总': 'Summary', '明细': 'Details', '授权 new-api 管理员': 'Authorize new-api administrator',
-      'new-api 用户': 'new-api user', '用户名': 'Username', 'Hub 角色': 'Hub role', '组织范围': 'Organization scope',
+      '汇总': 'Summary', '明细': 'Details', '授权管理员': 'Authorize administrator',
+      '用户列表': 'User list', '用户名': 'Username', 'Hub 角色': 'Hub role', '组织范围': 'Organization scope',
       '授权': 'Authorize', '授权列表': 'Authorizations', 'TokenOperation 对接': 'TokenOperation integration',
       '配置状态': 'Configuration status', '刷新状态': 'Refresh status', '同步对象清单': 'Sync object inventory',
       '客户侧结算明细': 'Customer settlement details', '读取明细': 'Load details', '尚未读取': 'Not loaded yet',
@@ -686,7 +688,7 @@ const indexHTML = `<!doctype html>
       '启用': 'Enabled', '禁用': 'Disabled', '请选择': 'Select', '全局': 'Global', '不设置': 'Not set',
       '不覆盖': 'No override', '不绑定，按上级继承': 'Not bound; inherit from parent', '继承或稍后指定': 'Inherit or specify later',
       '不绑定组织': 'No organization', '不绑定项目': 'No project', '不绑定成本中心': 'No cost center',
-      '按组织继承': 'Inherit from organization', '选择管理员用户': 'Select administrator',
+      '按组织继承': 'Inherit from organization', '选择用户': 'Select user',
       '顶层组织': 'Root organization', '请选择范围对象': 'Select a scope object', '暂无数据': 'No data',
       '操作': 'Actions', '编辑': 'Edit', '删除': 'Delete', '同步': 'Sync', '轮换': 'Rotate',
       '保存修改': 'Save changes', '保存并同步': 'Save and sync', '归零': 'Reset', '通过 Policy 管理': 'Managed by Policy',
@@ -1382,7 +1384,7 @@ const indexHTML = `<!doctype html>
       const rows = await api('admin-bindings');
       document.getElementById('admin-table').innerHTML = table(rows, [
         { key: 'id', label: 'ID', className: 'cell-compact', format: recordID },
-        { key: 'newapi_user_id', label: 'new-api 用户', className: 'cell-medium', format: (value, row) => namedID('users', value, row.newapi_username) },
+        { key: 'newapi_user_id', label: '用户列表', className: 'cell-medium', format: (value, row) => namedID('users', value, row.newapi_username) },
         { key: 'hub_role', label: 'Hub 角色', className: 'cell-medium' },
         { key: 'scope_org_unit_id', label: '组织范围', className: 'cell-medium', format: value => value ? namedID('org_units', value, t('组织')) : t('全局') },
         { key: 'status', label: '状态', format: translatedValue }
