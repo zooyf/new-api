@@ -448,14 +448,16 @@ const indexHTML = `<!doctype html>
       <section id="usage">
         <h2>用量报表</h2>
         <div class="toolbar">
-          <select id="usage-group">
-            <option value="org_unit">按组织</option>
-            <option value="key">按 Key</option>
-            <option value="model">按模型</option>
-            <option value="channel">按渠道</option>
-            <option value="project">按项目</option>
-            <option value="cost_center">按成本中心</option>
-          </select>
+          <label>汇总维度
+            <select id="usage-group">
+              <option value="org_unit">组织</option>
+              <option value="key">Key</option>
+              <option value="model">模型</option>
+              <option value="channel">渠道</option>
+              <option value="project">项目</option>
+              <option value="cost_center">成本中心</option>
+            </select>
+          </label>
           <button class="secondary" onclick="loadUsage()">刷新用量</button>
         </div>
         <div class="grid">
@@ -993,7 +995,8 @@ const indexHTML = `<!doctype html>
         { key: 'period_kind', label: '周期' },
         { key: 'period_start', label: '开始时间', format: formatUnixSeconds },
         { key: 'period_end', label: '结束时间', format: formatUnixSeconds },
-        { key: 'budget_quota', label: '预算' }, { key: 'used_quota', label: '已用' },
+        { key: 'budget_quota', label: '预算' }, { key: 'confirmed_used_quota', label: '已结算' },
+        { key: 'pending_quota', label: '待结算' }, { key: 'used_quota', label: '合计' },
         { key: 'active_block_count', label: '阻断 Key' }, { key: 'status', label: '状态' }
       ], row => row.source_type === 'policy'
         ? '<span class="status">通过 Policy 管理</span>'
@@ -1007,11 +1010,15 @@ const indexHTML = `<!doctype html>
       const summary = await api('usage/summary?group_by=' + encodeURIComponent(groupBy));
       const details = await api('usage/details?limit=50');
       document.getElementById('usage-summary').innerHTML = table(summary, [
-        { key: 'key', label: '维度' }, { key: 'quota', label: 'quota' }, { key: 'amount', label: '金额' }, { key: 'count', label: '次数' }
+        { key: 'key', label: '维度' }, { key: 'confirmed_quota', label: '已结算 quota' },
+        { key: 'pending_quota', label: '待结算 quota' }, { key: 'quota', label: '合计 quota' },
+        { key: 'confirmed_amount', label: '已结算金额' }, { key: 'pending_amount', label: '待结算金额' },
+        { key: 'amount', label: '合计金额' }, { key: 'count', label: '记录数' }
       ]);
       document.getElementById('usage-details').innerHTML = table(details, [
         { key: 'id', label: 'ID' }, { key: 'newapi_log_id', label: 'log' }, { key: 'enterprise_key_id', label: 'Key' },
-        { key: 'model_name', label: '模型' }, { key: 'channel_id', label: '渠道' }, { key: 'quota', label: 'quota' }
+        { key: 'model_name', label: '模型' }, { key: 'channel_id', label: '渠道' },
+        { key: 'task_id', label: '任务 ID' }, { key: 'usage_state', label: '结算状态' }, { key: 'quota', label: 'quota' }
       ]);
     }
 

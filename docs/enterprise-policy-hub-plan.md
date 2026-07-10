@@ -4,7 +4,7 @@
 
 客户希望不要让员工自己注册 new-api 用户，也不要让管理员批量创建员工用户后让员工自行生成 API Key。客户希望由管理员统一创建和管理 Key，并按公司组织架构控制部门、项目、成本中心的模型权限、用量和预算。
 
-本方案采用旁路服务实现，不改变 new-api 的请求、路由和计费链路。为保证旁路服务直接更新 `tokens` 后与 Redis 缓存一致，只在 `model/token.go`、`model/token_cache.go` 增加两个窄接口；业务请求不会经过 Policy Hub。new-api 继续负责现有能力：
+本方案采用旁路服务实现，不改变 new-api 的请求、路由和计费链路。为保证旁路服务直接更新 `tokens` 后与 Redis 缓存一致，只在 `model/token.go`、`model/token_cache.go` 增加两个窄接口；异步任务初始消费日志额外写入已生成的公开 `task_id`，让 Hub 能区分预扣与最终结算。业务请求不会经过 Policy Hub。new-api 继续负责现有能力：
 
 - API Key 鉴权
 - `token.group` 分组路由
@@ -81,12 +81,13 @@ Policy
 - 不改使用日志逻辑
 - 不改 new-api 前端菜单
 
-仅保留两个缓存一致性接口：
+仅保留三个稳定补丁点：
 
 - `model.InvalidateTokenCache`：删除企业 Key 时撤销 Redis token 缓存。
 - `model.UpdateTokenCacheAfterExternalWrite`：Policy Hub 更新 token 元数据或额度上限时，以 Redis Lua 原子更新缓存；保留 new-api 批量额度更新尚未落库的消费差值，避免从旧数据库值重新补充额度。
+- `service.LogTaskConsumption`：把 `RelayInfo.PublicTaskID` 写入异步预扣日志的 `other.task_id`。Hub 将该额度记为 pending，任务完成、失败退款或差额结算后才纳入预算阻断判断。
 
-这组补丁不进入客户 API 请求路径，后续合并社区更新时只需维护 `model/token.go` 和 `model/token_cache.go` 两个稳定点。
+这组补丁不增加新的网络调用或数据库写入，后续合并社区更新时只需维护 `model/token.go`、`model/token_cache.go` 和 `service/task_billing.go` 三个稳定点。
 
 如果希望在 new-api 后台菜单里增加“企业策略中心”外链，那属于可选前端小改动，不属于第一期必要范围。
 

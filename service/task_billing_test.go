@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -11,11 +12,46 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func TestLogTaskConsumptionIncludesPublicTaskID(t *testing.T) {
+	truncate(t)
+	seedUser(t, 1, 10_000)
+	seedChannel(t, 2)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", nil)
+	c.Set("token_name", "enterprise-key")
+	info := &relaycommon.RelayInfo{
+		TokenId:         3,
+		UserId:          1,
+		UsingGroup:      "default",
+		OriginModelName: "video-model",
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: 2},
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{Action: "generate", PublicTaskID: "task_public_123"},
+		PriceData: types.PriceData{
+			Quota:          700,
+			ModelRatio:     2.8,
+			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+		},
+	}
+
+	LogTaskConsumption(c, info)
+
+	var logRow model.Log
+	require.NoError(t, model.DB.Order("id desc").First(&logRow).Error)
+	var other map[string]interface{}
+	require.NoError(t, common.UnmarshalJsonStr(logRow.Other, &other))
+	assert.Equal(t, true, other["is_task"])
+	assert.Equal(t, "task_public_123", other["task_id"])
+}
 
 func TestMain(m *testing.M) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

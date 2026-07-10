@@ -86,23 +86,24 @@ func (a *App) ensurePolicyBudgetsAt(timestamp int64, reconcileCurrent bool) erro
 			var account BudgetAccount
 			err := a.db.Where("managed_key = ?", managedKey).First(&account).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				usedQuota, sumErr := a.sumUsageForBudgetScope(assignment.ScopeType, assignment.ScopeID, start, end)
+				usedQuota, pendingQuota, sumErr := a.sumUsageForBudgetScope(assignment.ScopeType, assignment.ScopeID, start, end)
 				if sumErr != nil {
 					return sumErr
 				}
 				account = BudgetAccount{
-					ScopeType:   assignment.ScopeType,
-					ScopeID:     assignment.ScopeID,
-					PeriodStart: start,
-					PeriodEnd:   end,
-					BudgetQuota: period.quota,
-					UsedQuota:   usedQuota,
-					Currency:    "quota",
-					Status:      StatusEnabled,
-					SourceType:  BudgetSourcePolicy,
-					SourceID:    assignment.Policy.ID,
-					PeriodKind:  period.kind,
-					ManagedKey:  &managedKey,
+					ScopeType:    assignment.ScopeType,
+					ScopeID:      assignment.ScopeID,
+					PeriodStart:  start,
+					PeriodEnd:    end,
+					BudgetQuota:  period.quota,
+					UsedQuota:    usedQuota,
+					PendingQuota: pendingQuota,
+					Currency:     "quota",
+					Status:       StatusEnabled,
+					SourceType:   BudgetSourcePolicy,
+					SourceID:     assignment.Policy.ID,
+					PeriodKind:   period.kind,
+					ManagedKey:   &managedKey,
 				}
 				if err := a.db.Create(&account).Error; err != nil {
 					if retryErr := a.db.Where("managed_key = ?", managedKey).First(&account).Error; retryErr != nil {
@@ -158,16 +159,24 @@ func (a *App) ensurePolicyBudgetsAt(timestamp int64, reconcileCurrent bool) erro
 	return nil
 }
 
-func (a *App) sumUsageForBudgetScope(scopeType string, scopeID int, start int64, end int64) (int, error) {
+func (a *App) sumUsageForBudgetScope(scopeType string, scopeID int, start int64, end int64) (int, int, error) {
 	query, err := a.budgetLedgerQuery(scopeType, scopeID, start, end)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	var total int64
 	if err := query.Select("COALESCE(SUM(quota), 0)").Scan(&total).Error; err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return int(total), nil
+	pendingQuery, err := a.budgetLedgerQuery(scopeType, scopeID, start, end)
+	if err != nil {
+		return 0, 0, err
+	}
+	var pending int64
+	if err := pendingQuery.Where("usage_state = ?", UsageStatePending).Select("COALESCE(SUM(quota), 0)").Scan(&pending).Error; err != nil {
+		return 0, 0, err
+	}
+	return int(total), int(pending), nil
 }
 
 func (a *App) budgetLedgerQuery(scopeType string, scopeID int, start int64, end int64) (*gorm.DB, error) {
@@ -221,6 +230,8 @@ func (a *App) backfillBudgetTransactions(account BudgetAccount) error {
 			SourceID:        ledger.NewAPILogID,
 			Quota:           ledger.Quota,
 			Direction:       direction,
+			TaskID:          ledger.TaskID,
+			Pending:         ledger.UsageState == UsageStatePending,
 		}
 		if err := a.db.Where("budget_account_id = ? AND new_api_log_id = ?", account.ID, ledger.NewAPILogID).
 			FirstOrCreate(&transaction).Error; err != nil {
@@ -269,7 +280,7 @@ func (a *App) reconcileBudgetEnforcement(now int64) error {
 	}
 
 	var exceeded []BudgetAccount
-	if err := a.db.Where("status = ? AND budget_quota > 0 AND used_quota >= budget_quota", StatusEnabled).
+	if err := a.db.Where("status = ? AND budget_quota > 0 AND (used_quota - pending_quota) >= budget_quota", StatusEnabled).
 		Where("(period_start = 0 OR period_start <= ?) AND (period_end = 0 OR period_end > ?)", now, now).
 		Find(&exceeded).Error; err != nil {
 		return err
@@ -283,7 +294,8 @@ func (a *App) reconcileBudgetEnforcement(now int64) error {
 }
 
 func budgetShouldBlock(account BudgetAccount, now int64) bool {
-	if account.Status != StatusEnabled || account.BudgetQuota <= 0 || account.UsedQuota < account.BudgetQuota {
+	confirmedQuota := account.UsedQuota - account.PendingQuota
+	if account.Status != StatusEnabled || account.BudgetQuota <= 0 || confirmedQuota < account.BudgetQuota {
 		return false
 	}
 	if account.PeriodStart > 0 && account.PeriodStart > now {

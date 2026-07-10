@@ -16,6 +16,8 @@ const (
 	BudgetPeriodMonthly = "monthly"
 	BudgetBlockActive   = "active"
 	BudgetBlockReleased = "released"
+	UsageStatePending   = "pending"
+	UsageStateSettled   = "settled"
 
 	HubRoleSuperAdmin   = "hub_super_admin"
 	HubRoleOrgAdmin     = "hub_org_admin"
@@ -136,22 +138,23 @@ func (EnterpriseKey) TableName() string {
 }
 
 type BudgetAccount struct {
-	ID          int            `json:"id" gorm:"primaryKey"`
-	ScopeType   string         `json:"scope_type" gorm:"type:varchar(32);index:idx_eph_budget_scope,priority:1"`
-	ScopeID     int            `json:"scope_id" gorm:"index:idx_eph_budget_scope,priority:2"`
-	PeriodStart int64          `json:"period_start" gorm:"index"`
-	PeriodEnd   int64          `json:"period_end" gorm:"index"`
-	BudgetQuota int            `json:"budget_quota" gorm:"default:0"`
-	UsedQuota   int            `json:"used_quota" gorm:"default:0"`
-	Currency    string         `json:"currency" gorm:"type:varchar(16);default:'quota'"`
-	Status      string         `json:"status" gorm:"type:varchar(32);index;default:'enabled'"`
-	SourceType  string         `json:"source_type" gorm:"type:varchar(32);index"`
-	SourceID    int            `json:"source_id" gorm:"index;default:0"`
-	PeriodKind  string         `json:"period_kind" gorm:"type:varchar(32);index"`
-	ManagedKey  *string        `json:"managed_key,omitempty" gorm:"type:varchar(255);uniqueIndex"`
-	CreatedAt   int64          `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt   int64          `json:"updated_at" gorm:"autoUpdateTime"`
-	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+	ID           int            `json:"id" gorm:"primaryKey"`
+	ScopeType    string         `json:"scope_type" gorm:"type:varchar(32);index:idx_eph_budget_scope,priority:1"`
+	ScopeID      int            `json:"scope_id" gorm:"index:idx_eph_budget_scope,priority:2"`
+	PeriodStart  int64          `json:"period_start" gorm:"index"`
+	PeriodEnd    int64          `json:"period_end" gorm:"index"`
+	BudgetQuota  int            `json:"budget_quota" gorm:"default:0"`
+	UsedQuota    int            `json:"used_quota" gorm:"default:0"`
+	PendingQuota int            `json:"pending_quota" gorm:"default:0"`
+	Currency     string         `json:"currency" gorm:"type:varchar(16);default:'quota'"`
+	Status       string         `json:"status" gorm:"type:varchar(32);index;default:'enabled'"`
+	SourceType   string         `json:"source_type" gorm:"type:varchar(32);index"`
+	SourceID     int            `json:"source_id" gorm:"index;default:0"`
+	PeriodKind   string         `json:"period_kind" gorm:"type:varchar(32);index"`
+	ManagedKey   *string        `json:"managed_key,omitempty" gorm:"type:varchar(255);uniqueIndex"`
+	CreatedAt    int64          `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt    int64          `json:"updated_at" gorm:"autoUpdateTime"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 func (BudgetAccount) TableName() string {
@@ -167,6 +170,8 @@ type BudgetTransaction struct {
 	SourceID        int    `json:"source_id" gorm:"index"`
 	Quota           int    `json:"quota"`
 	Direction       string `json:"direction" gorm:"type:varchar(32);index"`
+	TaskID          string `json:"task_id" gorm:"type:varchar(191);index"`
+	Pending         bool   `json:"pending" gorm:"index"`
 	CreatedAt       int64  `json:"created_at" gorm:"autoCreateTime"`
 }
 
@@ -202,6 +207,8 @@ type OrganizationUsageLedger struct {
 	Quota           int     `json:"quota"`
 	Amount          float64 `json:"amount"`
 	Currency        string  `json:"currency" gorm:"type:varchar(16);default:'quota'"`
+	TaskID          string  `json:"task_id" gorm:"type:varchar(191);index"`
+	UsageState      string  `json:"usage_state" gorm:"type:varchar(32);index"`
 	CreatedAt       int64   `json:"created_at" gorm:"index"`
 	ImportedAt      int64   `json:"imported_at" gorm:"autoCreateTime"`
 }
@@ -258,7 +265,7 @@ func (Setting) TableName() string {
 }
 
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&OrgUnit{},
 		&OrgUnitClosure{},
 		&HubAdminBinding{},
@@ -271,5 +278,16 @@ func Migrate(db *gorm.DB) error {
 		&NewAPISyncJob{},
 		&AuditLog{},
 		&Setting{},
-	)
+	); err != nil {
+		return err
+	}
+	if err := db.Model(&BudgetAccount{}).Where("pending_quota IS NULL").Update("pending_quota", 0).Error; err != nil {
+		return err
+	}
+	if err := db.Model(&BudgetTransaction{}).Where("pending IS NULL").Update("pending", false).Error; err != nil {
+		return err
+	}
+	return db.Model(&OrganizationUsageLedger{}).
+		Where("usage_state IS NULL OR usage_state = ''").
+		Update("usage_state", UsageStateSettled).Error
 }

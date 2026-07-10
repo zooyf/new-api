@@ -945,6 +945,7 @@ Nginx 失败：
 cmd/enterprise-policy-hub/main.go
 model/token.go
 model/token_cache.go
+service/task_billing.go
 pkg/enterprisepolicyhub/config.go
 pkg/enterprisepolicyhub/models.go
 pkg/enterprisepolicyhub/app.go
@@ -967,7 +968,7 @@ controller/relay*
 web/default/*
 ```
 
-`model/token.go` 和 `model/token_cache.go` 是例外：只维护 `InvalidateTokenCache`、`UpdateTokenCacheAfterExternalWrite` 两个稳定接口。后者通过 Redis Lua 原子更新 token 元数据和额度上限差值，避免 `BATCH_UPDATE_ENABLED` 下数据库额度暂时落后于缓存时发生额度回补。
+`model/token.go`、`model/token_cache.go` 和 `service/task_billing.go` 是例外：前两者只维护 `InvalidateTokenCache`、`UpdateTokenCacheAfterExternalWrite` 两个稳定接口；任务计费只增加把既有 `PublicTaskID` 写入预扣日志 `other.task_id` 的字段赋值，不增加 I/O。Hub 由此可以把异步预扣与最终结算关联起来。
 
 这样后续跟随社区 new-api 更新时，只需要重点关注：
 
@@ -1014,6 +1015,7 @@ web/default/*
 - 达到预算后写 `eph_budget_key_blocks` 并禁用受影响 token；新周期或退款降到阈值以下时只释放对应预算阻断，不会覆盖管理员手工禁用状态。
 - 相同 Policy 同时挂在父子组织或 Key 上时，有效 Policy 只合并一次；各组织范围仍保留独立预算账户。
 - 用量 ledger 已存在但预算流水缺失时，同步任务会幂等补写流水，避免局部失败后永久漏算预算。
+- 异步任务预扣进入 `pending_quota`，不参与预算超限阻断；差额结算、失败退款或精确预扣任务完成后转为 confirmed。用量和预算页面同时显示待结算、已结算和合计，避免生成期间因预扣金额过大临时禁用 Key。
 - denied-only Policy 会从当前启用渠道/能力编译具体模型白名单；多层 allowed_models 交集为空时禁用 token，避免空列表被解释成不限模型。
 - 用量归集会把 new-api 退款日志转换成负 quota，并把预算流水方向标记为 `refund`。
 - TokenOperation 对象同步接口。

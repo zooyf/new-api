@@ -1950,7 +1950,8 @@ type budgetRequest struct {
 
 type budgetView struct {
 	BudgetAccount
-	ActiveBlockCount int64 `json:"active_block_count"`
+	ActiveBlockCount   int64 `json:"active_block_count"`
+	ConfirmedUsedQuota int   `json:"confirmed_used_quota"`
 }
 
 func (a *App) listBudgets(c *gin.Context) {
@@ -2001,7 +2002,11 @@ func (a *App) listBudgets(c *gin.Context) {
 		if row.PeriodKind == "" {
 			row.PeriodKind = BudgetPeriodCustom
 		}
-		views = append(views, budgetView{BudgetAccount: row, ActiveBlockCount: blockCount})
+		views = append(views, budgetView{
+			BudgetAccount:      row,
+			ActiveBlockCount:   blockCount,
+			ConfirmedUsedQuota: row.UsedQuota - row.PendingQuota,
+		})
 	}
 	respondOK(c, views)
 }
@@ -2101,7 +2106,15 @@ func (a *App) resetBudget(c *gin.Context) {
 		respondError(c, http.StatusConflict, "policy-managed budgets reset automatically with their natural period")
 		return
 	}
-	if err := a.db.Model(&BudgetAccount{}).Where("id = ?", id).Update("used_quota", 0).Error; err != nil {
+	if err := a.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&BudgetAccount{}).Where("id = ?", id).Updates(map[string]any{
+			"used_quota":    0,
+			"pending_quota": 0,
+		}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&BudgetTransaction{}).Where("budget_account_id = ? AND pending = ?", id, true).Update("pending", false).Error
+	}); err != nil {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -2188,6 +2201,20 @@ type UsageSyncResult struct {
 	DisabledKeyCount int `json:"disabled_key_count"`
 }
 
+type taskUsageLogMetadata struct {
+	IsTask bool   `json:"is_task"`
+	TaskID string `json:"task_id"`
+}
+
+func taskUsageMetadata(logRow model.Log) taskUsageLogMetadata {
+	var metadata taskUsageLogMetadata
+	if logRow.Other != "" {
+		_ = common.UnmarshalJsonStr(logRow.Other, &metadata)
+	}
+	metadata.TaskID = strings.TrimSpace(metadata.TaskID)
+	return metadata
+}
+
 func (a *App) SyncUsage(limit int) (UsageSyncResult, error) {
 	a.usageSyncMu.Lock()
 	defer a.usageSyncMu.Unlock()
@@ -2222,6 +2249,11 @@ func (a *App) SyncUsage(limit int) (UsageSyncResult, error) {
 		if logRow.Type == model.LogTypeRefund && quota > 0 {
 			quota = -quota
 		}
+		metadata := taskUsageMetadata(logRow)
+		usageState := UsageStateSettled
+		if metadata.IsTask && metadata.TaskID != "" {
+			usageState = UsageStatePending
+		}
 		var ledger OrganizationUsageLedger
 		err := a.db.Where("new_api_log_id = ?", logRow.Id).First(&ledger).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -2238,6 +2270,8 @@ func (a *App) SyncUsage(limit int) (UsageSyncResult, error) {
 				Quota:           quota,
 				Amount:          float64(quota) / float64(common.QuotaPerUnit),
 				Currency:        "quota",
+				TaskID:          metadata.TaskID,
+				UsageState:      usageState,
 				CreatedAt:       logRow.CreatedAt,
 			}
 			if err := a.db.Create(&ledger).Error; err != nil {
@@ -2254,7 +2288,19 @@ func (a *App) SyncUsage(limit int) (UsageSyncResult, error) {
 			return result, err
 		}
 		result.DisabledKeyCount += disabled
+		if metadata.TaskID != "" && !metadata.IsTask {
+			settled, err := a.settlePendingTaskBudgetTransactions(metadata.TaskID)
+			if err != nil {
+				return result, err
+			}
+			result.DisabledKeyCount += settled
+		}
 	}
+	settled, err := a.reconcileCompletedTaskUsage(now)
+	if err != nil {
+		return result, err
+	}
+	result.DisabledKeyCount += settled
 	if err := a.setSetting("last_newapi_log_id", strconv.Itoa(result.LastLogID)); err != nil {
 		return result, err
 	}
@@ -2268,6 +2314,10 @@ func (a *App) SyncUsage(limit int) (UsageSyncResult, error) {
 }
 
 func (a *App) applyBudgetTransactions(ledger OrganizationUsageLedger, key EnterpriseKey) (int, error) {
+	if ledger.UsageState == "" {
+		ledger.UsageState = UsageStateSettled
+	}
+	pending := ledger.UsageState == UsageStatePending
 	scopePairs := []struct {
 		scopeType string
 		scopeID   int
@@ -2324,11 +2374,16 @@ func (a *App) applyBudgetTransactions(ledger OrganizationUsageLedger, key Enterp
 					SourceID:        ledger.NewAPILogID,
 					Quota:           ledger.Quota,
 					Direction:       direction,
+					TaskID:          ledger.TaskID,
+					Pending:         pending,
 				}).Error; err != nil {
 					return err
 				}
-				return tx.Model(&BudgetAccount{}).Where("id = ?", account.ID).
-					Update("used_quota", gorm.Expr("used_quota + ?", ledger.Quota)).Error
+				updates := map[string]any{"used_quota": gorm.Expr("used_quota + ?", ledger.Quota)}
+				if pending {
+					updates["pending_quota"] = gorm.Expr("pending_quota + ?", ledger.Quota)
+				}
+				return tx.Model(&BudgetAccount{}).Where("id = ?", account.ID).Updates(updates).Error
 			}); err != nil {
 				return disabled, err
 			}
@@ -2383,10 +2438,14 @@ func (a *App) usageSummary(c *gin.Context) {
 	}
 
 	type summaryRow struct {
-		Key    string  `json:"key"`
-		Quota  int     `json:"quota"`
-		Amount float64 `json:"amount"`
-		Count  int64   `json:"count"`
+		Key             string  `json:"key"`
+		Quota           int     `json:"quota"`
+		PendingQuota    int     `json:"pending_quota"`
+		ConfirmedQuota  int     `json:"confirmed_quota"`
+		Amount          float64 `json:"amount"`
+		PendingAmount   float64 `json:"pending_amount"`
+		ConfirmedAmount float64 `json:"confirmed_amount"`
+		Count           int64   `json:"count"`
 	}
 	rowsByKey := map[string]*summaryRow{}
 	for _, ledger := range ledgers {
@@ -2413,6 +2472,13 @@ func (a *App) usageSummary(c *gin.Context) {
 		}
 		row.Quota += ledger.Quota
 		row.Amount += ledger.Amount
+		if ledger.UsageState == UsageStatePending {
+			row.PendingQuota += ledger.Quota
+			row.PendingAmount += ledger.Amount
+		} else {
+			row.ConfirmedQuota += ledger.Quota
+			row.ConfirmedAmount += ledger.Amount
+		}
 		row.Count++
 	}
 	rows := make([]summaryRow, 0, len(rowsByKey))

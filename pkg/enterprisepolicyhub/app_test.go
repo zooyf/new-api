@@ -470,6 +470,104 @@ func TestSyncUsageRepairsMissingBudgetTransactionForExistingLedger(t *testing.T)
 	assert.Equal(t, 250, transaction.Quota)
 }
 
+func TestAsyncTaskPrechargeDoesNotBlockBudgetBeforeSettlement(t *testing.T) {
+	app, db := newTestApp(t)
+	require.NoError(t, db.AutoMigrate(&model.Log{}, &model.Task{}))
+
+	key := EnterpriseKey{Name: "async-key", NewAPITokenID: 201, Status: StatusEnabled, SyncStatus: StatusSynced}
+	require.NoError(t, db.Create(&key).Error)
+	budget := BudgetAccount{ScopeType: "enterprise_key", ScopeID: key.ID, BudgetQuota: 200, Status: StatusEnabled}
+	require.NoError(t, db.Create(&budget).Error)
+	taskID := "task_pending_budget"
+	require.NoError(t, db.Create(&model.Task{TaskID: taskID, Status: model.TaskStatusInProgress, UpdatedAt: time.Now().Unix()}).Error)
+	require.NoError(t, db.Create(&model.Log{
+		Id:        20,
+		CreatedAt: time.Now().Unix(),
+		Type:      model.LogTypeConsume,
+		Quota:     700,
+		TokenId:   key.NewAPITokenID,
+		Other:     common.MapToJsonStr(map[string]interface{}{"is_task": true, "task_id": taskID}),
+	}).Error)
+
+	_, err := app.SyncUsage(100)
+	require.NoError(t, err)
+	var pending BudgetAccount
+	require.NoError(t, db.First(&pending, budget.ID).Error)
+	assert.Equal(t, 700, pending.UsedQuota)
+	assert.Equal(t, 700, pending.PendingQuota)
+	assert.False(t, budgetShouldBlock(pending, time.Now().Unix()))
+	var blockCount int64
+	require.NoError(t, db.Model(&BudgetKeyBlock{}).Where("status = ?", BudgetBlockActive).Count(&blockCount).Error)
+	assert.Zero(t, blockCount)
+
+	require.NoError(t, db.Create(&model.Log{
+		Id:        21,
+		CreatedAt: time.Now().Unix() + 1,
+		Type:      model.LogTypeRefund,
+		Quota:     558,
+		TokenId:   key.NewAPITokenID,
+		Other:     common.MapToJsonStr(map[string]interface{}{"task_id": taskID, "pre_consumed_quota": 700, "actual_quota": 142}),
+	}).Error)
+	_, err = app.SyncUsage(100)
+	require.NoError(t, err)
+	require.NoError(t, db.First(&pending, budget.ID).Error)
+	assert.Equal(t, 142, pending.UsedQuota)
+	assert.Zero(t, pending.PendingQuota)
+	assert.False(t, budgetShouldBlock(pending, time.Now().Unix()))
+
+	var transactions []BudgetTransaction
+	require.NoError(t, db.Where("budget_account_id = ?", budget.ID).Order("new_api_log_id asc").Find(&transactions).Error)
+	require.Len(t, transactions, 2)
+	assert.False(t, transactions[0].Pending)
+	assert.Equal(t, taskID, transactions[0].TaskID)
+	assert.Equal(t, -558, transactions[1].Quota)
+}
+
+func TestAsyncTaskExactPrechargeSettlesAfterTerminalState(t *testing.T) {
+	app, db := newTestApp(t)
+	require.NoError(t, db.AutoMigrate(&model.Log{}, &model.Task{}))
+
+	key := EnterpriseKey{Name: "exact-key", NewAPITokenID: 202, Status: StatusEnabled, SyncStatus: StatusSynced}
+	require.NoError(t, db.Create(&key).Error)
+	budget := BudgetAccount{ScopeType: "enterprise_key", ScopeID: key.ID, BudgetQuota: 1000, Status: StatusEnabled}
+	require.NoError(t, db.Create(&budget).Error)
+	task := model.Task{TaskID: "task_exact_budget", Status: model.TaskStatusInProgress, UpdatedAt: time.Now().Unix()}
+	require.NoError(t, db.Create(&task).Error)
+	require.NoError(t, db.Create(&model.Log{
+		Id:        30,
+		CreatedAt: time.Now().Unix(),
+		Type:      model.LogTypeConsume,
+		Quota:     700,
+		TokenId:   key.NewAPITokenID,
+		Other:     common.MapToJsonStr(map[string]interface{}{"is_task": true, "task_id": task.TaskID}),
+	}).Error)
+
+	_, err := app.SyncUsage(100)
+	require.NoError(t, err)
+	var account BudgetAccount
+	require.NoError(t, db.First(&account, budget.ID).Error)
+	assert.Equal(t, 700, account.PendingQuota)
+
+	require.NoError(t, db.Model(&model.Task{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
+		"status":      model.TaskStatusSuccess,
+		"finish_time": time.Now().Add(-time.Minute).Unix(),
+		"updated_at":  time.Now().Add(-time.Minute).Unix(),
+	}).Error)
+	_, err = app.SyncUsage(100)
+	require.NoError(t, err)
+	require.NoError(t, db.First(&account, budget.ID).Error)
+	assert.Equal(t, 700, account.UsedQuota)
+	assert.Zero(t, account.PendingQuota)
+}
+
+func TestBudgetShouldBlockUsesConfirmedQuotaOnly(t *testing.T) {
+	now := time.Now().Unix()
+	account := BudgetAccount{Status: StatusEnabled, BudgetQuota: 200, UsedQuota: 700, PendingQuota: 700}
+	assert.False(t, budgetShouldBlock(account, now))
+	account.PendingQuota = 400
+	assert.True(t, budgetShouldBlock(account, now))
+}
+
 func TestSyncEnterpriseKeyUpdatesExistingTokenUserID(t *testing.T) {
 	app, db := newTestApp(t)
 	require.NoError(t, db.AutoMigrate(&model.Token{}))
