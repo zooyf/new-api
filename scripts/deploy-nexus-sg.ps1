@@ -191,13 +191,25 @@ try {
         Invoke-External docker save -o $localTar $image
 
         Write-Host "Uploading image archive to ${RemoteHost}:$remoteTar..."
-        Invoke-External scp $localTar "${RemoteHost}:$remoteTar"
+        Invoke-External -FilePath scp -Arguments @(
+            "-C",
+            "-o", "ServerAliveInterval=30",
+            "-o", "ServerAliveCountMax=6",
+            $localTar,
+            "${RemoteHost}:$remoteTar"
+        )
     } else {
         Write-Host "Packaging local source checkout to $localSourceTar..."
         New-SourceArchive -SourceRoot $RepoRoot -ArchivePath $localSourceTar
 
         Write-Host "Uploading source archive to ${RemoteHost}:$remoteSourceTar..."
-        Invoke-External scp $localSourceTar "${RemoteHost}:$remoteSourceTar"
+        Invoke-External -FilePath scp -Arguments @(
+            "-C",
+            "-o", "ServerAliveInterval=30",
+            "-o", "ServerAliveCountMax=6",
+            $localSourceTar,
+            "${RemoteHost}:$remoteSourceTar"
+        )
     }
 
     $skipBackupValue = if ($SkipBackup) { "1" } else { "0" }
