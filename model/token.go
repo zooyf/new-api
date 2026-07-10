@@ -336,6 +336,14 @@ func (token *Token) Delete() (err error) {
 	return err
 }
 
+// InvalidateTokenCache removes a token from Redis after an out-of-process database update.
+func InvalidateTokenCache(key string) error {
+	if !common.RedisEnabled || common.RDB == nil || key == "" {
+		return nil
+	}
+	return cacheDeleteToken(key)
+}
+
 func (token *Token) IsModelLimitsEnabled() bool {
 	return token.ModelLimitsEnabled
 }
