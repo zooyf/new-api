@@ -23,7 +23,7 @@ param(
     [string]$EnterpriseHubNewAPIBaseUrl = "http://new-api:3000",
     [string]$EnterpriseHubBootstrapAdminIds = "",
     [int]$EnterpriseHubLogSyncIntervalSeconds = 10,
-    [string]$EnterpriseHubBudgetTimezone = "Asia/Shanghai",
+    [string]$EnterpriseHubBudgetTimezone = "",
     [string]$TokenOperationEnabled = $env:EPH_TOKENOP_ENABLED,
     [string]$TokenOperationBaseUrl = $env:EPH_TOKENOP_BASE_URL,
     [string]$TokenOperationGatewayKey = $env:EPH_TOKENOP_GATEWAY_KEY,
@@ -304,6 +304,12 @@ tz_value="`$(printf '%s\n' "`$app_env" | sed -n 's/^TZ=//p' | head -n 1)"
 if [ -z "`$sql_dsn" ]; then
     echo "Cannot find SQL_DSN in `$new_api_service container environment." >&2
     exit 1
+fi
+if [ -z "`$hub_budget_timezone" ]; then
+    hub_budget_timezone="`$tz_value"
+fi
+if [ -z "`$hub_budget_timezone" ]; then
+    hub_budget_timezone="UTC"
 fi
 
 umask 077

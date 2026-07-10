@@ -134,6 +134,152 @@ func TestReferenceDataReturnsSelectableNewAPIObjects(t *testing.T) {
 	assert.Empty(t, payload.Data.BudgetTimezone)
 }
 
+func TestUsageEndpointsApplyAllFilters(t *testing.T) {
+	app, db := newTestApp(t)
+	target := OrganizationUsageLedger{
+		NewAPILogID:     1,
+		EnterpriseKeyID: 11,
+		OrgUnitID:       12,
+		ModelName:       "doubao-seedance-2-0-filter-off",
+		ChannelID:       13,
+		ProjectID:       14,
+		CostCenterID:    15,
+		Quota:           123,
+		Amount:          0.000246,
+		CreatedAt:       150,
+	}
+	rows := []OrganizationUsageLedger{target}
+	for i := 0; i < 9; i++ {
+		row := target
+		row.NewAPILogID = i + 2
+		switch i {
+		case 0:
+			row.EnterpriseKeyID++
+		case 1:
+			row.OrgUnitID++
+		case 2:
+			row.ModelName = "other-model"
+		case 3:
+			row.ChannelID++
+		case 4:
+			row.ProjectID++
+		case 5:
+			row.CostCenterID++
+		case 6:
+			row.CreatedAt = 99
+		case 7:
+			row.CreatedAt = 201
+		case 8:
+			row.CreatedAt = 200
+		}
+		rows = append(rows, row)
+	}
+	require.NoError(t, db.Create(&rows).Error)
+
+	query := url.Values{
+		"enterprise_key_id": {"11"},
+		"org_unit_id":       {"12"},
+		"model_name":        {"doubao-seedance-2-0-filter-off"},
+		"channel_id":        {"13"},
+		"project_id":        {"14"},
+		"cost_center_id":    {"15"},
+		"created_at_start":  {"100"},
+		"created_at_end":    {"200"},
+	}
+	admin := &AdminIdentity{NewAPIUserID: 1, Username: "root", HubRole: HubRoleSuperAdmin}
+
+	t.Run("summary", func(t *testing.T) {
+		query.Set("group_by", "model")
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/enterprise/api/usage/summary?"+query.Encode(), nil)
+		ctx.Set("hub_admin", admin)
+
+		app.usageSummary(ctx)
+
+		require.Equal(t, http.StatusOK, recorder.Code)
+		var payload struct {
+			Success bool `json:"success"`
+			Data    []struct {
+				Key   string `json:"key"`
+				Quota int    `json:"quota"`
+				Count int64  `json:"count"`
+			} `json:"data"`
+		}
+		require.NoError(t, common.DecodeJson(recorder.Body, &payload))
+		require.True(t, payload.Success)
+		require.Len(t, payload.Data, 1)
+		assert.Equal(t, target.ModelName, payload.Data[0].Key)
+		assert.Equal(t, target.Quota, payload.Data[0].Quota)
+		assert.EqualValues(t, 1, payload.Data[0].Count)
+	})
+
+	t.Run("details", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/enterprise/api/usage/details?"+query.Encode(), nil)
+		ctx.Set("hub_admin", admin)
+
+		app.usageDetails(ctx)
+
+		require.Equal(t, http.StatusOK, recorder.Code)
+		var payload struct {
+			Success bool                      `json:"success"`
+			Data    []OrganizationUsageLedger `json:"data"`
+		}
+		require.NoError(t, common.DecodeJson(recorder.Body, &payload))
+		require.True(t, payload.Success)
+		require.Len(t, payload.Data, 1)
+		assert.Equal(t, target.NewAPILogID, payload.Data[0].NewAPILogID)
+	})
+}
+
+func TestUsageSummaryValidatesGroupBy(t *testing.T) {
+	app, db := newTestApp(t)
+	ledger := OrganizationUsageLedger{
+		NewAPILogID:     1,
+		EnterpriseKeyID: 11,
+		OrgUnitID:       12,
+		ModelName:       "test-model",
+		ChannelID:       13,
+		ProjectID:       14,
+		CostCenterID:    15,
+		Quota:           1,
+		CreatedAt:       100,
+	}
+	require.NoError(t, db.Create(&ledger).Error)
+
+	tests := map[string]string{
+		"org_unit":    "12",
+		"key":         "11",
+		"model":       "test-model",
+		"channel":     "13",
+		"project":     "14",
+		"cost_center": "15",
+		"invalid":     "12",
+	}
+	for groupBy, expectedKey := range tests {
+		t.Run(groupBy, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodGet, "/enterprise/api/usage/summary?group_by="+url.QueryEscape(groupBy), nil)
+			ctx.Set("hub_admin", &AdminIdentity{NewAPIUserID: 1, Username: "root", HubRole: HubRoleSuperAdmin})
+
+			app.usageSummary(ctx)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var payload struct {
+				Data []struct {
+					Key string `json:"key"`
+				} `json:"data"`
+			}
+			require.NoError(t, common.DecodeJson(recorder.Body, &payload))
+			require.Len(t, payload.Data, 1)
+			assert.Equal(t, expectedKey, payload.Data[0].Key)
+		})
+	}
+}
+
 func TestDeleteOrgUnitProtectsReferencesAndCleansClosures(t *testing.T) {
 	t.Run("rejects child org", func(t *testing.T) {
 		app, db := newTestApp(t)
@@ -493,9 +639,13 @@ func TestAsyncTaskPrechargeDoesNotBlockBudgetBeforeSettlement(t *testing.T) {
 	require.NoError(t, err)
 	var pending BudgetAccount
 	require.NoError(t, db.First(&pending, budget.ID).Error)
-	assert.Equal(t, 700, pending.UsedQuota)
-	assert.Equal(t, 700, pending.PendingQuota)
+	assert.Zero(t, pending.UsedQuota)
+	assert.Zero(t, pending.PendingQuota)
 	assert.False(t, budgetShouldBlock(pending, time.Now().Unix()))
+	var pendingLedger OrganizationUsageLedger
+	require.NoError(t, db.First(&pendingLedger, "new_api_log_id = ?", 20).Error)
+	assert.Equal(t, 700, pendingLedger.Quota)
+	assert.Equal(t, UsageStatePending, pendingLedger.UsageState)
 	var blockCount int64
 	require.NoError(t, db.Model(&BudgetKeyBlock{}).Where("status = ?", BudgetBlockActive).Count(&blockCount).Error)
 	assert.Zero(t, blockCount)
@@ -546,7 +696,8 @@ func TestAsyncTaskExactPrechargeSettlesAfterTerminalState(t *testing.T) {
 	require.NoError(t, err)
 	var account BudgetAccount
 	require.NoError(t, db.First(&account, budget.ID).Error)
-	assert.Equal(t, 700, account.PendingQuota)
+	assert.Zero(t, account.UsedQuota)
+	assert.Zero(t, account.PendingQuota)
 
 	require.NoError(t, db.Model(&model.Task{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
 		"status":      model.TaskStatusSuccess,
@@ -558,6 +709,44 @@ func TestAsyncTaskExactPrechargeSettlesAfterTerminalState(t *testing.T) {
 	require.NoError(t, db.First(&account, budget.ID).Error)
 	assert.Equal(t, 700, account.UsedQuota)
 	assert.Zero(t, account.PendingQuota)
+}
+
+func TestAsyncTaskSettlementBelongsToFinishPeriod(t *testing.T) {
+	app, db := newTestApp(t)
+	require.NoError(t, db.AutoMigrate(&model.Log{}, &model.Task{}))
+
+	key := EnterpriseKey{Name: "cross-period-key", NewAPITokenID: 203, Status: StatusEnabled, SyncStatus: StatusSynced}
+	require.NoError(t, db.Create(&key).Error)
+	firstPeriod := BudgetAccount{ScopeType: "enterprise_key", ScopeID: key.ID, PeriodStart: 100, PeriodEnd: 200, BudgetQuota: 1000, Status: StatusEnabled}
+	secondPeriod := BudgetAccount{ScopeType: "enterprise_key", ScopeID: key.ID, PeriodStart: 200, PeriodEnd: 300, BudgetQuota: 1000, Status: StatusEnabled}
+	require.NoError(t, db.Create(&firstPeriod).Error)
+	require.NoError(t, db.Create(&secondPeriod).Error)
+	taskID := "task_cross_period"
+	require.NoError(t, db.Create(&model.Task{TaskID: taskID, Status: model.TaskStatusInProgress, UpdatedAt: 150}).Error)
+	require.NoError(t, db.Create(&model.Log{
+		Id: 40, CreatedAt: 150, Type: model.LogTypeConsume, Quota: 700, TokenId: key.NewAPITokenID,
+		Other: common.MapToJsonStr(map[string]interface{}{"is_task": true, "task_id": taskID}),
+	}).Error)
+
+	_, err := app.SyncUsage(100)
+	require.NoError(t, err)
+	require.NoError(t, db.First(&firstPeriod, firstPeriod.ID).Error)
+	assert.Zero(t, firstPeriod.UsedQuota)
+
+	require.NoError(t, db.Create(&model.Log{
+		Id: 41, CreatedAt: 250, Type: model.LogTypeRefund, Quota: 558, TokenId: key.NewAPITokenID,
+		Other: common.MapToJsonStr(map[string]interface{}{"task_id": taskID, "pre_consumed_quota": 700, "actual_quota": 142}),
+	}).Error)
+	_, err = app.SyncUsage(100)
+	require.NoError(t, err)
+	require.NoError(t, db.First(&firstPeriod, firstPeriod.ID).Error)
+	require.NoError(t, db.First(&secondPeriod, secondPeriod.ID).Error)
+	assert.Zero(t, firstPeriod.UsedQuota)
+	assert.Equal(t, 142, secondPeriod.UsedQuota)
+	var initialLedger OrganizationUsageLedger
+	require.NoError(t, db.First(&initialLedger, "new_api_log_id = ?", 40).Error)
+	assert.Equal(t, int64(250), initialLedger.CreatedAt)
+	assert.Equal(t, UsageStateSettled, initialLedger.UsageState)
 }
 
 func TestBudgetShouldBlockUsesConfirmedQuotaOnly(t *testing.T) {

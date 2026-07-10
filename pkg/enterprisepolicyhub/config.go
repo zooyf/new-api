@@ -53,7 +53,10 @@ func LoadConfig() Config {
 	tokenOperationTimeoutSeconds := common.GetEnvOrDefault("EPH_TOKENOP_TIMEOUT_SECONDS", 10)
 	budgetTimezone := strings.TrimSpace(os.Getenv("EPH_BUDGET_TIMEZONE"))
 	if budgetTimezone == "" {
-		budgetTimezone = "Asia/Shanghai"
+		budgetTimezone = strings.TrimSpace(os.Getenv("TZ"))
+	}
+	if budgetTimezone == "" {
+		budgetTimezone = "UTC"
 	}
 
 	bootstrap := make(map[int]bool)

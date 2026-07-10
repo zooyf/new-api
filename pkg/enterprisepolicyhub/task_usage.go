@@ -10,59 +10,63 @@ import (
 
 const taskSettlementGracePeriod = 30 * time.Second
 
-func (a *App) settlePendingTaskBudgetTransactions(taskID string) (int, error) {
+func (a *App) settlePendingTaskBudgetTransactions(taskID string, settledAt int64) (int, error) {
 	if taskID == "" {
 		return 0, nil
 	}
-	var transactions []BudgetTransaction
-	if err := a.db.Where("task_id = ? AND pending = ?", taskID, true).Find(&transactions).Error; err != nil {
+	if settledAt <= 0 {
+		settledAt = time.Now().Unix()
+	}
+	var ledgers []OrganizationUsageLedger
+	if err := a.db.Where("task_id = ? AND usage_state IN ?", taskID, []string{UsageStatePending, UsageStateSettling}).Find(&ledgers).Error; err != nil {
 		return 0, err
 	}
-	if len(transactions) == 0 {
+	if len(ledgers) == 0 {
 		return 0, nil
 	}
+	if err := a.ensurePolicyBudgetsAt(settledAt, false); err != nil {
+		return 0, err
+	}
 
-	pendingByAccount := make(map[int]int)
-	keyID := 0
-	for _, transaction := range transactions {
-		pendingByAccount[transaction.BudgetAccountID] += transaction.Quota
-		if keyID == 0 {
-			keyID = transaction.EnterpriseKeyID
-		}
+	var legacyTransactions []BudgetTransaction
+	if err := a.db.Where("task_id = ? AND pending = ?", taskID, true).Find(&legacyTransactions).Error; err != nil {
+		return 0, err
+	}
+	legacyPendingByAccount := make(map[int]int)
+	legacyTransactionIDs := make([]int, 0, len(legacyTransactions))
+	for _, transaction := range legacyTransactions {
+		legacyPendingByAccount[transaction.BudgetAccountID] += transaction.Quota
+		legacyTransactionIDs = append(legacyTransactionIDs, transaction.ID)
 	}
 	if err := a.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&BudgetTransaction{}).
-			Where("task_id = ? AND pending = ?", taskID, true).
-			Update("pending", false).Error; err != nil {
-			return err
+		if len(legacyTransactionIDs) > 0 {
+			if err := tx.Where("id IN ?", legacyTransactionIDs).Delete(&BudgetTransaction{}).Error; err != nil {
+				return err
+			}
 		}
-		for accountID, pendingQuota := range pendingByAccount {
-			if err := tx.Model(&BudgetAccount{}).Where("id = ?", accountID).Update(
-				"pending_quota",
-				gorm.Expr("CASE WHEN pending_quota >= ? THEN pending_quota - ? ELSE 0 END", pendingQuota, pendingQuota),
-			).Error; err != nil {
+		for accountID, pendingQuota := range legacyPendingByAccount {
+			if err := tx.Model(&BudgetAccount{}).Where("id = ?", accountID).Updates(map[string]any{
+				"used_quota":    gorm.Expr("used_quota - ?", pendingQuota),
+				"pending_quota": gorm.Expr("CASE WHEN pending_quota >= ? THEN pending_quota - ? ELSE 0 END", pendingQuota, pendingQuota),
+			}).Error; err != nil {
 				return err
 			}
 		}
 		return tx.Model(&OrganizationUsageLedger{}).
-			Where("task_id = ? AND usage_state = ?", taskID, UsageStatePending).
-			Update("usage_state", UsageStateSettled).Error
+			Where("task_id = ? AND usage_state IN ?", taskID, []string{UsageStatePending, UsageStateSettling}).
+			Updates(map[string]any{"created_at": settledAt, "usage_state": UsageStateSettling}).Error
 	}); err != nil {
 		return 0, err
 	}
 
-	var key EnterpriseKey
-	if keyID > 0 {
-		_ = a.db.First(&key, keyID).Error
-	}
 	disabled := 0
-	for accountID := range pendingByAccount {
+	for accountID := range legacyPendingByAccount {
 		var account BudgetAccount
 		if err := a.db.First(&account, accountID).Error; err != nil {
 			return disabled, err
 		}
 		if budgetShouldBlock(account, time.Now().Unix()) {
-			count, err := a.ensureBudgetBlocks(account, key)
+			count, err := a.ensureBudgetBlocks(account, EnterpriseKey{})
 			if err != nil {
 				return disabled, err
 			}
@@ -70,6 +74,24 @@ func (a *App) settlePendingTaskBudgetTransactions(taskID string) (int, error) {
 		} else if _, err := a.releaseBudgetBlocks(account.ID); err != nil {
 			return disabled, err
 		}
+	}
+	for i := range ledgers {
+		ledgers[i].CreatedAt = settledAt
+		ledgers[i].UsageState = UsageStateSettling
+		var key EnterpriseKey
+		if err := a.db.First(&key, ledgers[i].EnterpriseKeyID).Error; err != nil {
+			return disabled, err
+		}
+		count, err := a.applyBudgetTransactions(ledgers[i], key)
+		if err != nil {
+			return disabled, err
+		}
+		disabled += count
+	}
+	if err := a.db.Model(&OrganizationUsageLedger{}).
+		Where("task_id = ? AND usage_state = ?", taskID, UsageStateSettling).
+		Update("usage_state", UsageStateSettled).Error; err != nil {
+		return disabled, err
 	}
 	return disabled, nil
 }
@@ -83,7 +105,7 @@ func (a *App) reconcileCompletedTaskUsage(now int64) (int, error) {
 	var pending []pendingTask
 	if err := a.db.Model(&OrganizationUsageLedger{}).
 		Select("task_id, MIN(new_api_log_id) AS new_api_log_id, MIN(new_api_token_id) AS new_api_token_id").
-		Where("usage_state = ? AND task_id <> ''", UsageStatePending).
+		Where("usage_state IN ? AND task_id <> ''", []string{UsageStatePending, UsageStateSettling}).
 		Group("task_id").Limit(1000).Scan(&pending).Error; err != nil {
 		return 0, err
 	}
@@ -124,7 +146,7 @@ func (a *App) reconcileCompletedTaskUsage(now int64) (int, error) {
 				continue
 			}
 		}
-		count, err := a.settlePendingTaskBudgetTransactions(item.TaskID)
+		count, err := a.settlePendingTaskBudgetTransactions(item.TaskID, finishedAt)
 		if err != nil {
 			return disabled, err
 		}

@@ -17,6 +17,7 @@ const (
 	BudgetBlockActive   = "active"
 	BudgetBlockReleased = "released"
 	UsageStatePending   = "pending"
+	UsageStateSettling  = "settling"
 	UsageStateSettled   = "settled"
 
 	HubRoleSuperAdmin   = "hub_super_admin"

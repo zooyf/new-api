@@ -2289,7 +2289,7 @@ func (a *App) SyncUsage(limit int) (UsageSyncResult, error) {
 		}
 		result.DisabledKeyCount += disabled
 		if metadata.TaskID != "" && !metadata.IsTask {
-			settled, err := a.settlePendingTaskBudgetTransactions(metadata.TaskID)
+			settled, err := a.settlePendingTaskBudgetTransactions(metadata.TaskID, logRow.CreatedAt)
 			if err != nil {
 				return result, err
 			}
@@ -2317,7 +2317,9 @@ func (a *App) applyBudgetTransactions(ledger OrganizationUsageLedger, key Enterp
 	if ledger.UsageState == "" {
 		ledger.UsageState = UsageStateSettled
 	}
-	pending := ledger.UsageState == UsageStatePending
+	if ledger.UsageState == UsageStatePending {
+		return 0, nil
+	}
 	scopePairs := []struct {
 		scopeType string
 		scopeID   int
@@ -2375,14 +2377,11 @@ func (a *App) applyBudgetTransactions(ledger OrganizationUsageLedger, key Enterp
 					Quota:           ledger.Quota,
 					Direction:       direction,
 					TaskID:          ledger.TaskID,
-					Pending:         pending,
+					Pending:         false,
 				}).Error; err != nil {
 					return err
 				}
 				updates := map[string]any{"used_quota": gorm.Expr("used_quota + ?", ledger.Quota)}
-				if pending {
-					updates["pending_quota"] = gorm.Expr("pending_quota + ?", ledger.Quota)
-				}
 				return tx.Model(&BudgetAccount{}).Where("id = ?", account.ID).Updates(updates).Error
 			}); err != nil {
 				return disabled, err
@@ -2409,6 +2408,11 @@ func (a *App) applyBudgetTransactions(ledger OrganizationUsageLedger, key Enterp
 
 func (a *App) usageSummary(c *gin.Context) {
 	groupBy := c.DefaultQuery("group_by", "org_unit")
+	switch groupBy {
+	case "org_unit", "key", "model", "channel", "project", "cost_center":
+	default:
+		groupBy = "org_unit"
+	}
 	var ledgers []OrganizationUsageLedger
 	query := a.db.Model(&OrganizationUsageLedger{})
 	if ids, unrestricted, err := a.accessibleOrgIDs(currentAdmin(c)); err != nil {
@@ -2417,20 +2421,10 @@ func (a *App) usageSummary(c *gin.Context) {
 	} else if !unrestricted {
 		query = query.Where("org_unit_id IN ?", ids)
 	}
-	if keyID, _ := strconv.Atoi(c.Query("enterprise_key_id")); keyID > 0 {
-		query = query.Where("enterprise_key_id = ?", keyID)
-	}
-	if orgID, _ := strconv.Atoi(c.Query("org_unit_id")); orgID > 0 {
-		if !a.requireOrgScope(c, orgID) {
-			return
-		}
-		query = query.Where("org_unit_id = ?", orgID)
-	}
-	if start, _ := strconv.ParseInt(c.Query("created_at_start"), 10, 64); start > 0 {
-		query = query.Where("created_at >= ?", start)
-	}
-	if end, _ := strconv.ParseInt(c.Query("created_at_end"), 10, 64); end > 0 {
-		query = query.Where("created_at <= ?", end)
+	var ok bool
+	query, ok = a.applyUsageFilters(c, query)
+	if !ok {
+		return
 	}
 	if err := query.Find(&ledgers).Error; err != nil {
 		respondError(c, http.StatusInternalServerError, err.Error())
@@ -2472,7 +2466,7 @@ func (a *App) usageSummary(c *gin.Context) {
 		}
 		row.Quota += ledger.Quota
 		row.Amount += ledger.Amount
-		if ledger.UsageState == UsageStatePending {
+		if ledger.UsageState != UsageStateSettled {
 			row.PendingQuota += ledger.Quota
 			row.PendingAmount += ledger.Amount
 		} else {
@@ -2504,20 +2498,47 @@ func (a *App) usageDetails(c *gin.Context) {
 	} else if !unrestricted {
 		query = query.Where("org_unit_id IN ?", ids)
 	}
-	if keyID, _ := strconv.Atoi(c.Query("enterprise_key_id")); keyID > 0 {
-		query = query.Where("enterprise_key_id = ?", keyID)
-	}
-	if orgID, _ := strconv.Atoi(c.Query("org_unit_id")); orgID > 0 {
-		if !a.requireOrgScope(c, orgID) {
-			return
-		}
-		query = query.Where("org_unit_id = ?", orgID)
+	var ok bool
+	query, ok = a.applyUsageFilters(c, query)
+	if !ok {
+		return
 	}
 	if err := query.Find(&rows).Error; err != nil {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	respondOK(c, rows)
+}
+
+func (a *App) applyUsageFilters(c *gin.Context, query *gorm.DB) (*gorm.DB, bool) {
+	if keyID, _ := strconv.Atoi(c.Query("enterprise_key_id")); keyID > 0 {
+		query = query.Where("enterprise_key_id = ?", keyID)
+	}
+	if orgID, _ := strconv.Atoi(c.Query("org_unit_id")); orgID > 0 {
+		if !a.requireOrgScope(c, orgID) {
+			return query, false
+		}
+		query = query.Where("org_unit_id = ?", orgID)
+	}
+	if modelName := strings.TrimSpace(c.Query("model_name")); modelName != "" {
+		query = query.Where("model_name = ?", modelName)
+	}
+	if channelID, _ := strconv.Atoi(c.Query("channel_id")); channelID > 0 {
+		query = query.Where("channel_id = ?", channelID)
+	}
+	if projectID, _ := strconv.Atoi(c.Query("project_id")); projectID > 0 {
+		query = query.Where("project_id = ?", projectID)
+	}
+	if costCenterID, _ := strconv.Atoi(c.Query("cost_center_id")); costCenterID > 0 {
+		query = query.Where("cost_center_id = ?", costCenterID)
+	}
+	if start, _ := strconv.ParseInt(c.Query("created_at_start"), 10, 64); start > 0 {
+		query = query.Where("created_at >= ?", start)
+	}
+	if end, _ := strconv.ParseInt(c.Query("created_at_end"), 10, 64); end > 0 {
+		query = query.Where("created_at < ?", end)
+	}
+	return query, true
 }
 
 func (a *App) auditLogs(c *gin.Context) {
