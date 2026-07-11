@@ -14,8 +14,10 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -620,6 +622,7 @@ func (a *App) referenceData(c *gin.Context) {
 		"policies":        policies,
 		"enterprise_keys": keys,
 		"budget_timezone": a.config.BudgetTimezone,
+		"quota_currency":  currentQuotaCurrencyConfig(),
 	})
 }
 
@@ -939,17 +942,26 @@ func (a *App) deleteOrgUnit(c *gin.Context) {
 }
 
 type policyRequest struct {
-	Name               string   `json:"name"`
-	Description        string   `json:"description"`
-	DefaultGroup       string   `json:"default_group"`
-	AllowedModels      []string `json:"allowed_models"`
-	DeniedModels       []string `json:"denied_models"`
-	MonthlyBudgetQuota int      `json:"monthly_budget_quota"`
-	DailyBudgetQuota   int      `json:"daily_budget_quota"`
-	Currency           string   `json:"currency"`
-	KeyDefaultQuota    int      `json:"key_default_quota"`
-	InheritMode        string   `json:"inherit_mode"`
-	Status             string   `json:"status"`
+	Name                   string           `json:"name"`
+	Description            string           `json:"description"`
+	DefaultGroup           string           `json:"default_group"`
+	AllowedModels          []string         `json:"allowed_models"`
+	DeniedModels           []string         `json:"denied_models"`
+	MonthlyBudgetQuota     int              `json:"monthly_budget_quota"`
+	MonthlyBudgetAmount    *decimal.Decimal `json:"monthly_budget_amount"`
+	MonthlyBudgetCurrency  string           `json:"monthly_budget_currency"`
+	MonthlyBudgetUnlimited bool             `json:"monthly_budget_unlimited"`
+	DailyBudgetQuota       int              `json:"daily_budget_quota"`
+	DailyBudgetAmount      *decimal.Decimal `json:"daily_budget_amount"`
+	DailyBudgetCurrency    string           `json:"daily_budget_currency"`
+	DailyBudgetUnlimited   bool             `json:"daily_budget_unlimited"`
+	Currency               string           `json:"currency"`
+	KeyDefaultQuota        int              `json:"key_default_quota"`
+	KeyDefaultAmount       *decimal.Decimal `json:"key_default_amount"`
+	KeyDefaultCurrency     string           `json:"key_default_currency"`
+	KeyDefaultUnlimited    bool             `json:"key_default_unlimited"`
+	InheritMode            string           `json:"inherit_mode"`
+	Status                 string           `json:"status"`
 }
 
 type policyView struct {
@@ -1033,7 +1045,10 @@ func (a *App) updatePolicy(c *gin.Context) {
 	}
 	after.ID = id
 	if err := a.db.Model(&after).Select("name", "description", "default_group", "allowed_models", "denied_models",
-		"monthly_budget_quota", "daily_budget_quota", "currency", "key_default_quota", "inherit_mode", "status").Updates(&after).Error; err != nil {
+		"monthly_budget_quota", "monthly_budget_amount", "monthly_budget_currency", "monthly_budget_quota_per_unit", "monthly_budget_exchange_rate",
+		"daily_budget_quota", "daily_budget_amount", "daily_budget_currency", "daily_budget_quota_per_unit", "daily_budget_exchange_rate",
+		"currency", "key_default_quota", "key_default_amount", "key_default_currency", "key_default_quota_per_unit", "key_default_exchange_rate",
+		"inherit_mode", "status").Updates(&after).Error; err != nil {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -1099,26 +1114,62 @@ func policyFromRequest(req policyRequest) (Policy, error) {
 	if status == "" {
 		status = StatusEnabled
 	}
-	currency := req.Currency
+	monthly, err := resolveMonetaryQuota(monetaryQuotaInput{
+		Amount: req.MonthlyBudgetAmount, Currency: req.MonthlyBudgetCurrency,
+		Unlimited: req.MonthlyBudgetUnlimited, LegacyQuota: req.MonthlyBudgetQuota,
+	})
+	if err != nil {
+		return Policy{}, fmt.Errorf("monthly budget: %w", err)
+	}
+	daily, err := resolveMonetaryQuota(monetaryQuotaInput{
+		Amount: req.DailyBudgetAmount, Currency: req.DailyBudgetCurrency,
+		Unlimited: req.DailyBudgetUnlimited, LegacyQuota: req.DailyBudgetQuota,
+	})
+	if err != nil {
+		return Policy{}, fmt.Errorf("daily budget: %w", err)
+	}
+	keyDefault, err := resolveMonetaryQuota(monetaryQuotaInput{
+		Amount: req.KeyDefaultAmount, Currency: req.KeyDefaultCurrency,
+		Unlimited: req.KeyDefaultUnlimited, LegacyQuota: req.KeyDefaultQuota,
+	})
+	if err != nil {
+		return Policy{}, fmt.Errorf("key default quota: %w", err)
+	}
+	currency := normalizeQuotaCurrency(req.Currency)
 	if currency == "" {
-		currency = "quota"
+		currency = monthly.Currency
+	}
+	if currency == "" {
+		currency = quotaCurrency
 	}
 	inheritMode := req.InheritMode
 	if inheritMode == "" {
 		inheritMode = "intersect"
 	}
 	return Policy{
-		Name:               name,
-		Description:        req.Description,
-		DefaultGroup:       strings.TrimSpace(req.DefaultGroup),
-		AllowedModels:      joinCSV(req.AllowedModels),
-		DeniedModels:       joinCSV(req.DeniedModels),
-		MonthlyBudgetQuota: req.MonthlyBudgetQuota,
-		DailyBudgetQuota:   req.DailyBudgetQuota,
-		Currency:           currency,
-		KeyDefaultQuota:    req.KeyDefaultQuota,
-		InheritMode:        inheritMode,
-		Status:             status,
+		Name:                      name,
+		Description:               req.Description,
+		DefaultGroup:              strings.TrimSpace(req.DefaultGroup),
+		AllowedModels:             joinCSV(req.AllowedModels),
+		DeniedModels:              joinCSV(req.DeniedModels),
+		MonthlyBudgetQuota:        monthly.Quota,
+		MonthlyBudgetAmount:       monthly.Amount,
+		MonthlyBudgetCurrency:     monthly.Currency,
+		MonthlyBudgetQuotaPerUnit: monthly.QuotaPerUnit,
+		MonthlyBudgetExchangeRate: monthly.ExchangeRate,
+		DailyBudgetQuota:          daily.Quota,
+		DailyBudgetAmount:         daily.Amount,
+		DailyBudgetCurrency:       daily.Currency,
+		DailyBudgetQuotaPerUnit:   daily.QuotaPerUnit,
+		DailyBudgetExchangeRate:   daily.ExchangeRate,
+		Currency:                  currency,
+		KeyDefaultQuota:           keyDefault.Quota,
+		KeyDefaultAmount:          keyDefault.Amount,
+		KeyDefaultCurrency:        keyDefault.Currency,
+		KeyDefaultQuotaPerUnit:    keyDefault.QuotaPerUnit,
+		KeyDefaultExchangeRate:    keyDefault.ExchangeRate,
+		InheritMode:               inheritMode,
+		Status:                    status,
 	}, nil
 }
 
@@ -1498,9 +1549,15 @@ type EffectivePolicy struct {
 	AllowedModelsRestricted bool     `json:"allowed_models_restricted"`
 	DeniedModels            []string `json:"denied_models"`
 	MonthlyBudgetQuota      int      `json:"monthly_budget_quota"`
+	MonthlyBudgetAmount     string   `json:"monthly_budget_amount"`
+	MonthlyBudgetCurrency   string   `json:"monthly_budget_currency"`
 	DailyBudgetQuota        int      `json:"daily_budget_quota"`
+	DailyBudgetAmount       string   `json:"daily_budget_amount"`
+	DailyBudgetCurrency     string   `json:"daily_budget_currency"`
 	Currency                string   `json:"currency"`
 	KeyDefaultQuota         int      `json:"key_default_quota"`
+	KeyDefaultAmount        string   `json:"key_default_amount"`
+	KeyDefaultCurrency      string   `json:"key_default_currency"`
 	PolicyIDs               []int    `json:"policy_ids"`
 }
 
@@ -1570,12 +1627,18 @@ func (a *App) effectivePolicyForKey(key EnterpriseKey) (EffectivePolicy, error) 
 		}
 		if policy.MonthlyBudgetQuota > 0 && (effective.MonthlyBudgetQuota == 0 || policy.MonthlyBudgetQuota < effective.MonthlyBudgetQuota) {
 			effective.MonthlyBudgetQuota = policy.MonthlyBudgetQuota
+			effective.MonthlyBudgetAmount = policy.MonthlyBudgetAmount
+			effective.MonthlyBudgetCurrency = policy.MonthlyBudgetCurrency
 		}
 		if policy.DailyBudgetQuota > 0 && (effective.DailyBudgetQuota == 0 || policy.DailyBudgetQuota < effective.DailyBudgetQuota) {
 			effective.DailyBudgetQuota = policy.DailyBudgetQuota
+			effective.DailyBudgetAmount = policy.DailyBudgetAmount
+			effective.DailyBudgetCurrency = policy.DailyBudgetCurrency
 		}
 		if policy.KeyDefaultQuota > 0 {
 			effective.KeyDefaultQuota = policy.KeyDefaultQuota
+			effective.KeyDefaultAmount = policy.KeyDefaultAmount
+			effective.KeyDefaultCurrency = policy.KeyDefaultCurrency
 		}
 		if policy.Currency != "" {
 			effective.Currency = policy.Currency
@@ -1939,13 +2002,15 @@ func adminBindingFromRequest(req adminBindingRequest) (HubAdminBinding, error) {
 }
 
 type budgetRequest struct {
-	ScopeType   string `json:"scope_type"`
-	ScopeID     int    `json:"scope_id"`
-	PeriodStart int64  `json:"period_start"`
-	PeriodEnd   int64  `json:"period_end"`
-	BudgetQuota int    `json:"budget_quota"`
-	Currency    string `json:"currency"`
-	Status      string `json:"status"`
+	ScopeType      string           `json:"scope_type"`
+	ScopeID        int              `json:"scope_id"`
+	PeriodStart    int64            `json:"period_start"`
+	PeriodEnd      int64            `json:"period_end"`
+	BudgetQuota    int              `json:"budget_quota"`
+	BudgetAmount   *decimal.Decimal `json:"budget_amount"`
+	BudgetCurrency string           `json:"budget_currency"`
+	Currency       string           `json:"currency"`
+	Status         string           `json:"status"`
 }
 
 type budgetView struct {
@@ -2017,7 +2082,11 @@ func (a *App) createBudget(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	row := budgetFromRequest(req)
+	row, err := budgetFromRequest(req)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	if row.BudgetQuota <= 0 {
 		respondError(c, http.StatusBadRequest, "budget_quota must be greater than zero")
 		return
@@ -2055,7 +2124,11 @@ func (a *App) updateBudget(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	after := budgetFromRequest(req)
+	after, err := budgetFromRequest(req)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	if before.SourceType == BudgetSourcePolicy {
 		respondError(c, http.StatusConflict, "policy-managed budgets must be changed through Policy")
 		return
@@ -2072,7 +2145,8 @@ func (a *App) updateBudget(c *gin.Context) {
 		return
 	}
 	after.ID = id
-	if err := a.db.Model(&after).Select("scope_type", "scope_id", "period_start", "period_end", "budget_quota", "currency", "status").Updates(&after).Error; err != nil {
+	if err := a.db.Model(&after).Select("scope_type", "scope_id", "period_start", "period_end", "budget_quota",
+		"budget_amount", "budget_currency", "budget_quota_per_unit", "budget_exchange_rate", "currency", "status").Updates(&after).Error; err != nil {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -2157,26 +2231,40 @@ func (a *App) deleteBudget(c *gin.Context) {
 	respondOK(c, gin.H{"deleted": true})
 }
 
-func budgetFromRequest(req budgetRequest) BudgetAccount {
+func budgetFromRequest(req budgetRequest) (BudgetAccount, error) {
 	status := req.Status
 	if status == "" {
 		status = StatusEnabled
 	}
-	currency := req.Currency
+	monetary, err := resolveMonetaryQuota(monetaryQuotaInput{
+		Amount: req.BudgetAmount, Currency: req.BudgetCurrency,
+		LegacyQuota: req.BudgetQuota, RequirePositive: true,
+	})
+	if err != nil {
+		return BudgetAccount{}, fmt.Errorf("budget: %w", err)
+	}
+	currency := monetary.Currency
 	if currency == "" {
-		currency = "quota"
+		currency = normalizeQuotaCurrency(req.Currency)
+	}
+	if currency == "" {
+		currency = quotaCurrency
 	}
 	return BudgetAccount{
-		ScopeType:   req.ScopeType,
-		ScopeID:     req.ScopeID,
-		PeriodStart: req.PeriodStart,
-		PeriodEnd:   req.PeriodEnd,
-		BudgetQuota: req.BudgetQuota,
-		Currency:    currency,
-		Status:      status,
-		SourceType:  BudgetSourceManual,
-		PeriodKind:  BudgetPeriodCustom,
-	}
+		ScopeType:          req.ScopeType,
+		ScopeID:            req.ScopeID,
+		PeriodStart:        req.PeriodStart,
+		PeriodEnd:          req.PeriodEnd,
+		BudgetQuota:        monetary.Quota,
+		BudgetAmount:       monetary.Amount,
+		BudgetCurrency:     monetary.Currency,
+		BudgetQuotaPerUnit: monetary.QuotaPerUnit,
+		BudgetExchangeRate: monetary.ExchangeRate,
+		Currency:           currency,
+		Status:             status,
+		SourceType:         BudgetSourceManual,
+		PeriodKind:         BudgetPeriodCustom,
+	}, nil
 }
 
 func (a *App) syncUsageHandler(c *gin.Context) {
@@ -2269,7 +2357,7 @@ func (a *App) SyncUsage(limit int) (UsageSyncResult, error) {
 				UseGroup:        logRow.Group,
 				Quota:           quota,
 				Amount:          float64(quota) / float64(common.QuotaPerUnit),
-				Currency:        "quota",
+				Currency:        operation_setting.QuotaDisplayTypeUSD,
 				TaskID:          metadata.TaskID,
 				UsageState:      usageState,
 				CreatedAt:       logRow.CreatedAt,

@@ -88,21 +88,33 @@ func (HubAdminBinding) TableName() string {
 }
 
 type Policy struct {
-	ID                 int            `json:"id" gorm:"primaryKey"`
-	Name               string         `json:"name" gorm:"type:varchar(128);uniqueIndex;not null"`
-	Description        string         `json:"description" gorm:"type:text"`
-	DefaultGroup       string         `json:"default_group" gorm:"type:varchar(64);default:''"`
-	AllowedModels      string         `json:"allowed_models" gorm:"type:text"`
-	DeniedModels       string         `json:"denied_models" gorm:"type:text"`
-	MonthlyBudgetQuota int            `json:"monthly_budget_quota" gorm:"default:0"`
-	DailyBudgetQuota   int            `json:"daily_budget_quota" gorm:"default:0"`
-	Currency           string         `json:"currency" gorm:"type:varchar(16);default:'quota'"`
-	KeyDefaultQuota    int            `json:"key_default_quota" gorm:"default:0"`
-	InheritMode        string         `json:"inherit_mode" gorm:"type:varchar(32);default:'intersect'"`
-	Status             string         `json:"status" gorm:"type:varchar(32);index;default:'enabled'"`
-	CreatedAt          int64          `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt          int64          `json:"updated_at" gorm:"autoUpdateTime"`
-	DeletedAt          gorm.DeletedAt `json:"-" gorm:"index"`
+	ID                        int            `json:"id" gorm:"primaryKey"`
+	Name                      string         `json:"name" gorm:"type:varchar(128);uniqueIndex;not null"`
+	Description               string         `json:"description" gorm:"type:text"`
+	DefaultGroup              string         `json:"default_group" gorm:"type:varchar(64);default:''"`
+	AllowedModels             string         `json:"allowed_models" gorm:"type:text"`
+	DeniedModels              string         `json:"denied_models" gorm:"type:text"`
+	MonthlyBudgetQuota        int            `json:"monthly_budget_quota" gorm:"default:0"`
+	MonthlyBudgetAmount       string         `json:"monthly_budget_amount" gorm:"type:varchar(64)"`
+	MonthlyBudgetCurrency     string         `json:"monthly_budget_currency" gorm:"type:varchar(16)"`
+	MonthlyBudgetQuotaPerUnit float64        `json:"monthly_budget_quota_per_unit" gorm:"default:0"`
+	MonthlyBudgetExchangeRate float64        `json:"monthly_budget_exchange_rate" gorm:"default:0"`
+	DailyBudgetQuota          int            `json:"daily_budget_quota" gorm:"default:0"`
+	DailyBudgetAmount         string         `json:"daily_budget_amount" gorm:"type:varchar(64)"`
+	DailyBudgetCurrency       string         `json:"daily_budget_currency" gorm:"type:varchar(16)"`
+	DailyBudgetQuotaPerUnit   float64        `json:"daily_budget_quota_per_unit" gorm:"default:0"`
+	DailyBudgetExchangeRate   float64        `json:"daily_budget_exchange_rate" gorm:"default:0"`
+	Currency                  string         `json:"currency" gorm:"type:varchar(16);default:'quota'"`
+	KeyDefaultQuota           int            `json:"key_default_quota" gorm:"default:0"`
+	KeyDefaultAmount          string         `json:"key_default_amount" gorm:"type:varchar(64)"`
+	KeyDefaultCurrency        string         `json:"key_default_currency" gorm:"type:varchar(16)"`
+	KeyDefaultQuotaPerUnit    float64        `json:"key_default_quota_per_unit" gorm:"default:0"`
+	KeyDefaultExchangeRate    float64        `json:"key_default_exchange_rate" gorm:"default:0"`
+	InheritMode               string         `json:"inherit_mode" gorm:"type:varchar(32);default:'intersect'"`
+	Status                    string         `json:"status" gorm:"type:varchar(32);index;default:'enabled'"`
+	CreatedAt                 int64          `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt                 int64          `json:"updated_at" gorm:"autoUpdateTime"`
+	DeletedAt                 gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 func (Policy) TableName() string {
@@ -139,23 +151,27 @@ func (EnterpriseKey) TableName() string {
 }
 
 type BudgetAccount struct {
-	ID           int            `json:"id" gorm:"primaryKey"`
-	ScopeType    string         `json:"scope_type" gorm:"type:varchar(32);index:idx_eph_budget_scope,priority:1"`
-	ScopeID      int            `json:"scope_id" gorm:"index:idx_eph_budget_scope,priority:2"`
-	PeriodStart  int64          `json:"period_start" gorm:"index"`
-	PeriodEnd    int64          `json:"period_end" gorm:"index"`
-	BudgetQuota  int            `json:"budget_quota" gorm:"default:0"`
-	UsedQuota    int            `json:"used_quota" gorm:"default:0"`
-	PendingQuota int            `json:"pending_quota" gorm:"default:0"`
-	Currency     string         `json:"currency" gorm:"type:varchar(16);default:'quota'"`
-	Status       string         `json:"status" gorm:"type:varchar(32);index;default:'enabled'"`
-	SourceType   string         `json:"source_type" gorm:"type:varchar(32);index"`
-	SourceID     int            `json:"source_id" gorm:"index;default:0"`
-	PeriodKind   string         `json:"period_kind" gorm:"type:varchar(32);index"`
-	ManagedKey   *string        `json:"managed_key,omitempty" gorm:"type:varchar(255);uniqueIndex"`
-	CreatedAt    int64          `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt    int64          `json:"updated_at" gorm:"autoUpdateTime"`
-	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
+	ID                 int            `json:"id" gorm:"primaryKey"`
+	ScopeType          string         `json:"scope_type" gorm:"type:varchar(32);index:idx_eph_budget_scope,priority:1"`
+	ScopeID            int            `json:"scope_id" gorm:"index:idx_eph_budget_scope,priority:2"`
+	PeriodStart        int64          `json:"period_start" gorm:"index"`
+	PeriodEnd          int64          `json:"period_end" gorm:"index"`
+	BudgetQuota        int            `json:"budget_quota" gorm:"default:0"`
+	BudgetAmount       string         `json:"budget_amount" gorm:"type:varchar(64)"`
+	BudgetCurrency     string         `json:"budget_currency" gorm:"type:varchar(16)"`
+	BudgetQuotaPerUnit float64        `json:"budget_quota_per_unit" gorm:"default:0"`
+	BudgetExchangeRate float64        `json:"budget_exchange_rate" gorm:"default:0"`
+	UsedQuota          int            `json:"used_quota" gorm:"default:0"`
+	PendingQuota       int            `json:"pending_quota" gorm:"default:0"`
+	Currency           string         `json:"currency" gorm:"type:varchar(16);default:'quota'"`
+	Status             string         `json:"status" gorm:"type:varchar(32);index;default:'enabled'"`
+	SourceType         string         `json:"source_type" gorm:"type:varchar(32);index"`
+	SourceID           int            `json:"source_id" gorm:"index;default:0"`
+	PeriodKind         string         `json:"period_kind" gorm:"type:varchar(32);index"`
+	ManagedKey         *string        `json:"managed_key,omitempty" gorm:"type:varchar(255);uniqueIndex"`
+	CreatedAt          int64          `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt          int64          `json:"updated_at" gorm:"autoUpdateTime"`
+	DeletedAt          gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 func (BudgetAccount) TableName() string {

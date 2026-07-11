@@ -336,6 +336,37 @@ const indexHTML = `<!doctype html>
       font-size: 11px;
       line-height: 1.35;
     }
+    .money-quota-field {
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #f8fafc;
+    }
+    .money-quota-field > label:first-child { margin-top: 0; }
+    .money-input-row {
+      display: grid;
+      grid-template-columns: 100px minmax(0, 1fr);
+      gap: 8px;
+    }
+    .money-preview {
+      min-height: 20px;
+      margin-top: 7px;
+      color: var(--brand-dark);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .unlimited-toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 9px 0 0;
+      color: var(--text);
+    }
+    .unlimited-toggle input { width: auto; margin: 0; }
+    .quota-advanced { margin-top: 9px; color: var(--muted); }
+    .quota-advanced summary { cursor: pointer; font-size: 11px; }
+    .quota-advanced label { margin-bottom: 0; }
     .required-mark {
       color: var(--danger);
       font-weight: 700;
@@ -635,18 +666,33 @@ const indexHTML = `<!doctype html>
             <label>禁止模型
               <select name="denied_models" multiple size="8" data-ref-select="models"></select>
             </label>
-            <label>月预算 quota
-              <input name="monthly_budget_quota" type="number">
-              <span class="hint">按自然月限制该 Policy 所绑定组织或 Key 的合计用量，0 表示不限。</span>
-            </label>
-            <label>日预算 quota
-              <input name="daily_budget_quota" type="number">
-              <span class="hint">按预算时区的自然日自动创建周期，0 表示不限。</span>
-            </label>
-            <label>令牌默认 quota
-              <input name="key_default_quota" type="number">
-              <span class="hint">单个令牌的总额度上限；重复同步不会重新充值。</span>
-            </label>
+            <div class="money-quota-field" data-money-quota="monthly_budget" data-unlimited="true">
+              <label>月预算金额
+                <div class="money-input-row"><select name="monthly_budget_currency" data-money-currency></select><input name="monthly_budget_amount" type="number" min="0" step="0.01" inputmode="decimal"></div>
+                <span class="hint">按预算时区的自然月限制该 Policy 所绑定组织或令牌的合计用量。</span>
+              </label>
+              <label class="unlimited-toggle"><input name="monthly_budget_unlimited" type="checkbox" checked> 不限月预算</label>
+              <div class="money-preview" data-money-preview></div>
+              <details class="quota-advanced"><summary>高级：内部计费额度</summary><label>月预算 quota <input name="monthly_budget_quota" type="number" min="0" data-raw-quota></label></details>
+            </div>
+            <div class="money-quota-field" data-money-quota="daily_budget" data-unlimited="true">
+              <label>日预算金额
+                <div class="money-input-row"><select name="daily_budget_currency" data-money-currency></select><input name="daily_budget_amount" type="number" min="0" step="0.01" inputmode="decimal"></div>
+                <span class="hint">按预算时区的自然日自动创建周期。</span>
+              </label>
+              <label class="unlimited-toggle"><input name="daily_budget_unlimited" type="checkbox" checked> 不限日预算</label>
+              <div class="money-preview" data-money-preview></div>
+              <details class="quota-advanced"><summary>高级：内部计费额度</summary><label>日预算 quota <input name="daily_budget_quota" type="number" min="0" data-raw-quota></label></details>
+            </div>
+            <div class="money-quota-field" data-money-quota="key_default" data-unlimited="true">
+              <label>令牌默认金额
+                <div class="money-input-row"><select name="key_default_currency" data-money-currency></select><input name="key_default_amount" type="number" min="0" step="0.01" inputmode="decimal"></div>
+                <span class="hint">单个令牌的总额度上限；重复同步不会重新充值。</span>
+              </label>
+              <label class="unlimited-toggle"><input name="key_default_unlimited" type="checkbox" checked> 令牌额度不限</label>
+              <div class="money-preview" data-money-preview></div>
+              <details class="quota-advanced"><summary>高级：内部计费额度</summary><label>令牌默认 quota <input name="key_default_quota" type="number" min="0" data-raw-quota></label></details>
+            </div>
             <label>状态
               <select name="status">
                 <option value="enabled">启用</option>
@@ -741,7 +787,13 @@ const indexHTML = `<!doctype html>
               <input name="period_end" type="datetime-local" data-unix-seconds="true">
               <span class="hint">留空表示长期有效，不限制结束时间。</span>
             </label>
-            <label><span>预算 quota <span class="required-mark" aria-hidden="true">*</span></span><input name="budget_quota" type="number" required></label>
+            <div class="money-quota-field" data-money-quota="budget">
+              <label><span>预算金额 <span class="required-mark" aria-hidden="true">*</span></span>
+                <div class="money-input-row"><select name="budget_currency" data-money-currency></select><input name="budget_amount" type="number" min="0.01" step="0.01" inputmode="decimal" required></div>
+              </label>
+              <div class="money-preview" data-money-preview></div>
+              <details class="quota-advanced"><summary>高级：内部计费额度</summary><label>预算 quota <input name="budget_quota" type="number" min="1" data-raw-quota></label></details>
+            </div>
             <label>状态
               <select name="status">
                 <option value="enabled">启用</option>
@@ -959,7 +1011,15 @@ const indexHTML = `<!doctype html>
       '关闭': 'Close', '取消': 'Cancel', '创建下级组织': 'Create child organization',
       '创建下级时自动选择父组织；现有节点暂不支持移动。': 'The parent is selected automatically when creating a child. Existing nodes cannot be moved yet.',
       '稍后指定': 'Specify later', '企业令牌继承当前组织节点的所属账号，不会继续向上级组织查找。': 'Enterprise tokens inherit the account owner from this organization only; parent organizations are not searched.',
-      '月预算': 'Monthly budget', '日预算': 'Daily budget', 'Policy 交集': 'Policy intersection', '本级备用值': 'Direct fallback'
+      '月预算': 'Monthly budget', '日预算': 'Daily budget', 'Policy 交集': 'Policy intersection', '本级备用值': 'Direct fallback',
+      '月预算金额': 'Monthly budget amount', '日预算金额': 'Daily budget amount', '令牌默认金额': 'Default token amount',
+      '预算金额': 'Budget amount', '不限月预算': 'Unlimited monthly budget', '不限日预算': 'Unlimited daily budget',
+      '令牌额度不限': 'Unlimited token quota', '高级：内部计费额度': 'Advanced: internal billing quota',
+      '令牌额度': 'Token quota',
+      '内部计费额度': 'Internal billing quota', '按预算时区的自然月限制该 Policy 所绑定组织或令牌的合计用量。': 'Limits total usage for organizations or tokens attached to this Policy by calendar month in the budget timezone.',
+      '按预算时区的自然日自动创建周期。': 'Creates calendar-day periods in the budget timezone.',
+      '金额按提交时汇率换算，保存后不会随汇率变化。': 'Converted using the exchange rate at submission time; saved budgets do not change with later rates.',
+      '请输入金额': 'Enter an amount'
     };
 
     function t(key, values) {
@@ -1028,6 +1088,10 @@ const indexHTML = `<!doctype html>
       const data = {};
       for (const input of Array.from(form.elements)) {
         if (!input.name || input.disabled || input.type === 'submit' || input.type === 'button') continue;
+        if (input.type === 'checkbox') {
+          data[input.name] = input.checked;
+          continue;
+        }
         if (input.tagName === 'SELECT' && input.multiple) {
           data[input.name] = Array.from(input.selectedOptions).map(option => option.value).filter(Boolean);
           continue;
@@ -1048,6 +1112,146 @@ const indexHTML = `<!doctype html>
         }
       }
       return data;
+    }
+
+    function quotaCurrencyConfig() {
+      return (state.reference && state.reference.quota_currency) || {
+        quota_per_unit: 500000, display_type: 'USD', currency_symbol: '$', usd_exchange_rate: 7.3,
+        custom_currency_symbol: '¤', custom_currency_exchange_rate: 1
+      };
+    }
+
+    function normalizedDisplayCurrency() {
+      const display = String(quotaCurrencyConfig().display_type || 'USD').toUpperCase();
+      return ['USD', 'CNY', 'CUSTOM'].includes(display) ? display : 'USD';
+    }
+
+    function currencyRate(currency) {
+      const config = quotaCurrencyConfig();
+      if (currency === 'CNY') return Number(config.usd_exchange_rate || 0);
+      if (currency === 'CUSTOM') return Number(config.custom_currency_exchange_rate || 0);
+      if (currency === 'QUOTA') return Number(config.quota_per_unit || 500000);
+      return 1;
+    }
+
+    function currencySymbol(currency) {
+      const config = quotaCurrencyConfig();
+      if (currency === 'USD') return '$';
+      if (currency === 'CNY') return '¥';
+      if (currency === 'CUSTOM') return config.custom_currency_symbol || '¤';
+      return '';
+    }
+
+    function quotaFromAmount(amount, currency) {
+      const value = Number(amount);
+      const rate = currencyRate(currency);
+      if (!Number.isFinite(value) || !Number.isFinite(rate) || rate <= 0) return 0;
+      return Math.round(value * Number(quotaCurrencyConfig().quota_per_unit || 500000) / rate);
+    }
+
+    function amountFromQuota(quota, currency, quotaPerUnit, exchangeRate) {
+      const unit = Number(quotaPerUnit || quotaCurrencyConfig().quota_per_unit || 500000);
+      const rate = Number(exchangeRate || currencyRate(currency));
+      if (!unit || !Number.isFinite(rate)) return 0;
+      return Number(quota || 0) * rate / unit;
+    }
+
+    function formatCurrencyAmount(amount, currency) {
+      const value = Number(amount || 0);
+      const formatted = new Intl.NumberFormat(state.language === 'en' ? 'en-US' : 'zh-CN', {
+        minimumFractionDigits: 2, maximumFractionDigits: 6
+      }).format(Number.isFinite(value) ? value : 0);
+      return currency === 'QUOTA' ? formatted + ' quota' : currencySymbol(currency) + formatted + ' ' + currency;
+    }
+
+    function formatUSDInDisplayCurrency(amount) {
+      const currency = normalizedDisplayCurrency();
+      return formatCurrencyAmount(Number(amount || 0) * currencyRate(currency), currency);
+    }
+
+    function formatQuotaWithMoney(quota, amount, currency, quotaPerUnit, exchangeRate) {
+      const quotaValue = Number(quota || 0);
+      if (quotaValue <= 0) return t('不限');
+      const displayCurrency = currency || normalizedDisplayCurrency();
+      const displayAmount = amount !== null && amount !== undefined && String(amount) !== ''
+        ? Number(amount)
+        : amountFromQuota(quotaValue, displayCurrency, quotaPerUnit, exchangeRate);
+      return formatCurrencyAmount(displayAmount, displayCurrency) + ' · ' + quotaValue.toLocaleString() + ' quota';
+    }
+
+    function populateMoneyCurrencySelect(select) {
+      const selected = select.value || normalizedDisplayCurrency();
+      const customSymbol = quotaCurrencyConfig().custom_currency_symbol || '¤';
+      select.innerHTML = [
+        { value: 'USD', label: 'USD ($)' }, { value: 'CNY', label: 'CNY (¥)' },
+        { value: 'CUSTOM', label: 'CUSTOM (' + customSymbol + ')' }
+      ].map(item => '<option value="' + item.value + '">' + escapeHTML(item.label) + '</option>').join('');
+      select.value = ['USD', 'CNY', 'CUSTOM'].includes(selected) ? selected : normalizedDisplayCurrency();
+    }
+
+    function syncMoneyQuotaField(container, source) {
+      const prefix = container.dataset.moneyQuota;
+      const form = container.closest('form');
+      const amount = form.elements[prefix + '_amount'];
+      const currency = form.elements[prefix + '_currency'];
+      const rawQuota = form.elements[prefix + '_quota'];
+      const unlimited = form.elements[prefix + '_unlimited'];
+      const isUnlimited = Boolean(unlimited && unlimited.checked);
+      if (amount) amount.disabled = isUnlimited;
+      if (rawQuota) rawQuota.disabled = isUnlimited;
+      if (isUnlimited) {
+        if (rawQuota) rawQuota.value = '0';
+        container.querySelector('[data-money-preview]').textContent = t('不限');
+        return;
+      }
+      if (source === 'quota' && rawQuota && amount) {
+        amount.value = rawQuota.value === '' ? '' : String(Number(amountFromQuota(rawQuota.value, currency.value).toFixed(6)));
+      } else if (amount && rawQuota) {
+        rawQuota.value = amount.value === '' ? '' : String(quotaFromAmount(amount.value, currency.value));
+      }
+      const quota = Number(rawQuota && rawQuota.value || 0);
+      const preview = quota > 0
+        ? '≈ ' + quota.toLocaleString() + ' quota · ' + t('金额按提交时汇率换算，保存后不会随汇率变化。')
+        : t('请输入金额');
+      container.querySelector('[data-money-preview]').textContent = preview;
+    }
+
+    function initializeMoneyQuotaFields() {
+      document.querySelectorAll('[data-money-quota]').forEach(container => {
+        const select = container.querySelector('[data-money-currency]');
+        populateMoneyCurrencySelect(select);
+        if (container.dataset.moneyReady !== 'true') {
+          const amount = container.querySelector('input[name$="_amount"]');
+          const rawQuota = container.querySelector('[data-raw-quota]');
+          const unlimited = container.querySelector('input[name$="_unlimited"]');
+          amount.addEventListener('input', () => syncMoneyQuotaField(container, 'amount'));
+          select.addEventListener('change', () => syncMoneyQuotaField(container, 'amount'));
+          rawQuota.addEventListener('input', () => syncMoneyQuotaField(container, 'quota'));
+          if (unlimited) unlimited.addEventListener('change', () => syncMoneyQuotaField(container, 'unlimited'));
+          container.dataset.moneyReady = 'true';
+        }
+        syncMoneyQuotaField(container, 'amount');
+      });
+    }
+
+    function resetMoneyQuotaFields(form) {
+      form.querySelectorAll('[data-money-currency]').forEach(select => { select.value = normalizedDisplayCurrency(); });
+      initializeMoneyQuotaFields();
+    }
+
+    function setMoneyQuotaField(form, prefix, row) {
+      const quota = Number(row[prefix + '_quota'] || 0);
+      const storedCurrency = row[prefix + '_currency'] || normalizedDisplayCurrency();
+      const storedAmount = row[prefix + '_amount'];
+      setFormValue(form, prefix + '_currency', storedCurrency);
+      setFormValue(form, prefix + '_quota', quota);
+      setFormValue(form, prefix + '_unlimited', quota <= 0);
+      const amount = storedAmount !== null && storedAmount !== undefined && String(storedAmount) !== ''
+        ? storedAmount
+        : amountFromQuota(quota, storedCurrency, row[prefix + '_quota_per_unit'], row[prefix + '_exchange_rate']);
+      setFormValue(form, prefix + '_amount', quota > 0 ? Number(Number(amount).toFixed(6)) : '');
+      const container = form.querySelector('[data-money-quota="' + prefix + '"]');
+      if (container) syncMoneyQuotaField(container, 'amount');
     }
 
     async function loadReference() {
@@ -1129,6 +1333,7 @@ const indexHTML = `<!doctype html>
       }
       updateBudgetScopeOptions();
       updateAdminUsername();
+      initializeMoneyQuotaFields();
     }
 
     function fillReferenceSelects(name, options, config) {
@@ -1243,6 +1448,10 @@ const indexHTML = `<!doctype html>
     function setFormValue(form, name, value) {
       const input = form.elements[name];
       if (!input) return;
+      if (input.type === 'checkbox') {
+        input.checked = Boolean(value);
+        return;
+      }
       if (input.tagName === 'SELECT' && input.multiple) {
         const values = new Set((Array.isArray(value) ? value : []).map(String));
         for (const selectedValue of values) {
@@ -1292,6 +1501,8 @@ const indexHTML = `<!doctype html>
       let groupSource = null;
       let monthlyBudget = 0;
       let dailyBudget = 0;
+      let monthlyBudgetPolicy = null;
+      let dailyBudgetPolicy = null;
       for (const org of orgChain(row)) {
         const policy = policyRow(org.default_policy_id);
         if (!policy || policy.status !== 'enabled' || seen.has(Number(policy.id))) continue;
@@ -1303,8 +1514,14 @@ const indexHTML = `<!doctype html>
         }
         const monthly = Number(policy.monthly_budget_quota || 0);
         const daily = Number(policy.daily_budget_quota || 0);
-        if (monthly > 0 && (!monthlyBudget || monthly < monthlyBudget)) monthlyBudget = monthly;
-        if (daily > 0 && (!dailyBudget || daily < dailyBudget)) dailyBudget = daily;
+        if (monthly > 0 && (!monthlyBudget || monthly < monthlyBudget)) {
+          monthlyBudget = monthly;
+          monthlyBudgetPolicy = policy;
+        }
+        if (daily > 0 && (!dailyBudget || daily < dailyBudget)) {
+          dailyBudget = daily;
+          dailyBudgetPolicy = policy;
+        }
       }
       if (!effectiveGroup && row.default_group) {
         effectiveGroup = row.default_group;
@@ -1316,6 +1533,8 @@ const indexHTML = `<!doctype html>
         groupSource,
         monthlyBudget,
         dailyBudget,
+        monthlyBudgetPolicy,
+        dailyBudgetPolicy,
         account: referenceItem('users', row.newapi_user_id),
       };
     }
@@ -1342,8 +1561,16 @@ const indexHTML = `<!doctype html>
         ? (effective.account.username || effective.account.display_name) + ' (ID: ' + effective.account.id + ')'
         : t('未设置');
       const budgetText = (effective.monthlyBudget || effective.dailyBudget)
-        ? t('月预算') + ': ' + (effective.monthlyBudget || t('不限')) + ' / ' +
-          t('日预算') + ': ' + (effective.dailyBudget || t('不限'))
+        ? t('月预算') + ': ' + formatQuotaWithMoney(effective.monthlyBudget,
+            effective.monthlyBudgetPolicy && effective.monthlyBudgetPolicy.monthly_budget_amount,
+            effective.monthlyBudgetPolicy && effective.monthlyBudgetPolicy.monthly_budget_currency,
+            effective.monthlyBudgetPolicy && effective.monthlyBudgetPolicy.monthly_budget_quota_per_unit,
+            effective.monthlyBudgetPolicy && effective.monthlyBudgetPolicy.monthly_budget_exchange_rate) + ' / ' +
+          t('日预算') + ': ' + formatQuotaWithMoney(effective.dailyBudget,
+            effective.dailyBudgetPolicy && effective.dailyBudgetPolicy.daily_budget_amount,
+            effective.dailyBudgetPolicy && effective.dailyBudgetPolicy.daily_budget_currency,
+            effective.dailyBudgetPolicy && effective.dailyBudgetPolicy.daily_budget_quota_per_unit,
+            effective.dailyBudgetPolicy && effective.dailyBudgetPolicy.daily_budget_exchange_rate)
         : t('未设置');
       summary.hidden = false;
       summary.innerHTML =
@@ -1426,8 +1653,9 @@ const indexHTML = `<!doctype html>
       if (!row) return;
       state.editingPolicyId = id;
       const form = document.getElementById('policy-form');
-      ['name', 'default_group', 'monthly_budget_quota', 'daily_budget_quota', 'key_default_quota', 'status']
+      ['name', 'default_group', 'status']
         .forEach(name => setFormValue(form, name, row[name]));
+      ['monthly_budget', 'daily_budget', 'key_default'].forEach(prefix => setMoneyQuotaField(form, prefix, row));
       setFormValue(form, 'allowed_models', row.allowed_models_list || []);
       setFormValue(form, 'denied_models', row.denied_models_list || []);
       document.getElementById('policy-form-title').textContent = t('编辑') + ' Policy #' + id;
@@ -1440,6 +1668,7 @@ const indexHTML = `<!doctype html>
       state.editingPolicyId = 0;
       const form = document.getElementById('policy-form');
       form.reset();
+      resetMoneyQuotaFields(form);
       document.getElementById('policy-form-title').textContent = t('创建 Policy');
       document.getElementById('policy-submit').textContent = t('创建');
       document.getElementById('policy-cancel-edit').hidden = true;
@@ -1474,9 +1703,10 @@ const indexHTML = `<!doctype html>
       if (!row || row.source_type === 'policy') return;
       state.editingBudgetId = id;
       const form = document.getElementById('budget-form');
-      ['scope_type', 'scope_id', 'budget_quota', 'status'].forEach(name => setFormValue(form, name, row[name]));
+      ['scope_type', 'scope_id', 'status'].forEach(name => setFormValue(form, name, row[name]));
       updateBudgetScopeOptions();
       setFormValue(form, 'scope_id', row.scope_id);
+      setMoneyQuotaField(form, 'budget', row);
       setFormValue(form, 'period_start', unixSecondsToLocalInput(row.period_start));
       setFormValue(form, 'period_end', unixSecondsToLocalInput(row.period_end));
       document.getElementById('budget-form-title').textContent = t('编辑') + ' ' + t('手工预算') + ' #' + id;
@@ -1490,6 +1720,7 @@ const indexHTML = `<!doctype html>
       const form = document.getElementById('budget-form');
       form.reset();
       updateBudgetScopeOptions();
+      resetMoneyQuotaFields(form);
       document.getElementById('budget-form-title').textContent = t('创建手工预算');
       document.getElementById('budget-submit').textContent = t('创建');
       document.getElementById('budget-cancel-edit').hidden = true;
@@ -1766,8 +1997,10 @@ const indexHTML = `<!doctype html>
         { key: 'name', label: '名称', className: 'cell-medium' }, { key: 'default_group', label: 'group', className: 'cell-medium' },
         { key: 'allowed_models_list', label: '允许模型', className: 'cell-wide' },
         { key: 'denied_models_list', label: '禁止模型', className: 'cell-wide' },
-        { key: 'monthly_budget_quota', label: '月预算' }, { key: 'daily_budget_quota', label: '日预算' },
-        { key: 'key_default_quota', label: 'Key quota' }, { key: 'status', label: '状态', format: translatedValue }
+        { key: 'monthly_budget_quota', label: '月预算', className: 'cell-medium', format: (value, row) => formatQuotaWithMoney(value, row.monthly_budget_amount, row.monthly_budget_currency, row.monthly_budget_quota_per_unit, row.monthly_budget_exchange_rate) },
+        { key: 'daily_budget_quota', label: '日预算', className: 'cell-medium', format: (value, row) => formatQuotaWithMoney(value, row.daily_budget_amount, row.daily_budget_currency, row.daily_budget_quota_per_unit, row.daily_budget_exchange_rate) },
+        { key: 'key_default_quota', label: 'Key quota', className: 'cell-medium', format: (value, row) => formatQuotaWithMoney(value, row.key_default_amount, row.key_default_currency, row.key_default_quota_per_unit, row.key_default_exchange_rate) },
+        { key: 'status', label: '状态', format: translatedValue }
       ], row => '<div class="row-actions"><button class="secondary" onclick="beginPolicyEdit(' + row.id + ')">' + t('编辑') + '</button>' +
         '<button class="danger" onclick="deletePolicy(' + row.id + ')">' + t('删除') + '</button></div>');
       if (state.orgs) renderOrgTree();
@@ -1788,6 +2021,7 @@ const indexHTML = `<!doctype html>
         { key: 'newapi_token_id', label: 'new-api token', className: 'cell-medium', format: (value, row) => value ? (row.new_api_token_name || row.name || 'token') + ' (ID: ' + value + ')' : '' },
         { key: 'key_fingerprint', label: '指纹', className: 'cell-medium' },
         { key: 'status', label: '管理员状态', format: translatedValue }, { key: 'effective_status', label: '生效状态', format: translatedValue },
+        { key: 'applied_key_quota', label: '令牌额度', className: 'cell-medium', format: value => formatQuotaWithMoney(value, '', normalizedDisplayCurrency()) },
         { key: 'active_budget_blocks', label: '预算阻断' }, { key: 'sync_status', label: '同步', format: translatedValue }
       ], row => '<div class="row-actions"><button class="secondary" onclick="beginKeyEdit(' + row.id + ')">' + t('编辑') + '</button>' +
         '<button class="secondary" onclick="syncKey(' + row.id + ')">' + t('同步') + '</button>' +
@@ -1809,7 +2043,8 @@ const indexHTML = `<!doctype html>
         { key: 'period_kind', label: '周期', format: translatedValue },
         { key: 'period_start', label: '开始时间', format: formatUnixSeconds },
         { key: 'period_end', label: '结束时间', format: formatUnixSeconds },
-        { key: 'budget_quota', label: '预算' }, { key: 'confirmed_used_quota', label: '已结算' },
+        { key: 'budget_quota', label: '预算', className: 'cell-medium', format: (value, row) => formatQuotaWithMoney(value, row.budget_amount, row.budget_currency, row.budget_quota_per_unit, row.budget_exchange_rate) },
+        { key: 'confirmed_used_quota', label: '已结算', className: 'cell-medium', format: (value, row) => formatQuotaWithMoney(value, '', row.budget_currency, row.budget_quota_per_unit, row.budget_exchange_rate) },
         { key: 'active_block_count', label: '阻断令牌' }, { key: 'status', label: '状态', format: translatedValue }
       ], row => row.source_type === 'policy'
         ? '<span class="status">' + t('通过 Policy 管理') + '</span>'
@@ -1866,10 +2101,11 @@ const indexHTML = `<!doctype html>
         api('usage/details?' + detailParams.toString())
       ]);
       document.getElementById('usage-summary').innerHTML = table(summary, [
-        { key: 'key', label: '维度', className: 'cell-wide', format: usageDimension }, { key: 'confirmed_quota', label: '已结算 quota' },
-        { key: 'pending_quota', label: '待结算 quota' }, { key: 'quota', label: '合计 quota' },
-        { key: 'confirmed_amount', label: '已结算金额' }, { key: 'pending_amount', label: '待结算金额' },
-        { key: 'amount', label: '合计金额' }, { key: 'count', label: '记录数' }
+        { key: 'key', label: '维度', className: 'cell-wide', format: usageDimension },
+        { key: 'confirmed_amount', label: '已结算', className: 'cell-medium', format: (value, row) => formatUSDInDisplayCurrency(value) + ' · ' + Number(row.confirmed_quota || 0).toLocaleString() + ' quota' },
+        { key: 'pending_amount', label: '待结算', className: 'cell-medium', format: (value, row) => formatUSDInDisplayCurrency(value) + ' · ' + Number(row.pending_quota || 0).toLocaleString() + ' quota' },
+        { key: 'amount', label: '合计', className: 'cell-medium', format: (value, row) => formatUSDInDisplayCurrency(value) + ' · ' + Number(row.quota || 0).toLocaleString() + ' quota' },
+        { key: 'count', label: '记录数' }
       ]);
       document.getElementById('usage-details').innerHTML = table(details, [
         { key: 'id', label: 'ID', className: 'cell-compact', format: recordID },
@@ -1881,8 +2117,9 @@ const indexHTML = `<!doctype html>
         { key: 'model_name', label: '模型', className: 'cell-wide' },
         { key: 'channel_id', label: '渠道', className: 'cell-medium', format: value => namedID('channels', value, t('渠道')) },
         { key: 'task_id', label: '任务 ID', className: 'cell-wide' },
-        { key: 'usage_state', label: '结算状态', format: translatedValue }, { key: 'quota', label: 'quota' },
-        { key: 'amount', label: '合计金额' }, { key: 'created_at', label: '时间', className: 'cell-medium', format: formatUnixSeconds }
+        { key: 'usage_state', label: '结算状态', format: translatedValue },
+        { key: 'amount', label: '合计', className: 'cell-medium', format: (value, row) => formatUSDInDisplayCurrency(value) + ' · ' + Number(row.quota || 0).toLocaleString() + ' quota' },
+        { key: 'created_at', label: '时间', className: 'cell-medium', format: formatUnixSeconds }
       ]);
     }
 

@@ -70,15 +70,34 @@ func (a *App) ensurePolicyBudgetsAt(timestamp int64, reconcileCurrent bool) erro
 			continue
 		}
 		periods := []struct {
-			kind  string
-			quota int
+			kind         string
+			quota        int
+			amount       string
+			currency     string
+			quotaPerUnit float64
+			exchangeRate float64
 		}{
-			{kind: BudgetPeriodDaily, quota: assignment.Policy.DailyBudgetQuota},
-			{kind: BudgetPeriodMonthly, quota: assignment.Policy.MonthlyBudgetQuota},
+			{
+				kind: BudgetPeriodDaily, quota: assignment.Policy.DailyBudgetQuota,
+				amount: assignment.Policy.DailyBudgetAmount, currency: assignment.Policy.DailyBudgetCurrency,
+				quotaPerUnit: assignment.Policy.DailyBudgetQuotaPerUnit, exchangeRate: assignment.Policy.DailyBudgetExchangeRate,
+			},
+			{
+				kind: BudgetPeriodMonthly, quota: assignment.Policy.MonthlyBudgetQuota,
+				amount: assignment.Policy.MonthlyBudgetAmount, currency: assignment.Policy.MonthlyBudgetCurrency,
+				quotaPerUnit: assignment.Policy.MonthlyBudgetQuotaPerUnit, exchangeRate: assignment.Policy.MonthlyBudgetExchangeRate,
+			},
 		}
 		for _, period := range periods {
 			if period.quota <= 0 {
 				continue
+			}
+			periodCurrency := period.currency
+			if periodCurrency == "" {
+				periodCurrency = normalizeQuotaCurrency(assignment.Policy.Currency)
+			}
+			if periodCurrency == "" {
+				periodCurrency = quotaCurrency
 			}
 			start, end := a.policyBudgetPeriod(period.kind, timestamp)
 			managedKey := policyManagedBudgetKey(assignment.Policy.ID, assignment.ScopeType, assignment.ScopeID, period.kind, start)
@@ -91,19 +110,23 @@ func (a *App) ensurePolicyBudgetsAt(timestamp int64, reconcileCurrent bool) erro
 					return sumErr
 				}
 				account = BudgetAccount{
-					ScopeType:    assignment.ScopeType,
-					ScopeID:      assignment.ScopeID,
-					PeriodStart:  start,
-					PeriodEnd:    end,
-					BudgetQuota:  period.quota,
-					UsedQuota:    usedQuota,
-					PendingQuota: pendingQuota,
-					Currency:     "quota",
-					Status:       StatusEnabled,
-					SourceType:   BudgetSourcePolicy,
-					SourceID:     assignment.Policy.ID,
-					PeriodKind:   period.kind,
-					ManagedKey:   &managedKey,
+					ScopeType:          assignment.ScopeType,
+					ScopeID:            assignment.ScopeID,
+					PeriodStart:        start,
+					PeriodEnd:          end,
+					BudgetQuota:        period.quota,
+					BudgetAmount:       period.amount,
+					BudgetCurrency:     periodCurrency,
+					BudgetQuotaPerUnit: period.quotaPerUnit,
+					BudgetExchangeRate: period.exchangeRate,
+					UsedQuota:          usedQuota,
+					PendingQuota:       pendingQuota,
+					Currency:           periodCurrency,
+					Status:             StatusEnabled,
+					SourceType:         BudgetSourcePolicy,
+					SourceID:           assignment.Policy.ID,
+					PeriodKind:         period.kind,
+					ManagedKey:         &managedKey,
 				}
 				if err := a.db.Create(&account).Error; err != nil {
 					if retryErr := a.db.Where("managed_key = ?", managedKey).First(&account).Error; retryErr != nil {
@@ -116,16 +139,20 @@ func (a *App) ensurePolicyBudgetsAt(timestamp int64, reconcileCurrent bool) erro
 				return err
 			}
 			updates := map[string]any{
-				"scope_type":   assignment.ScopeType,
-				"scope_id":     assignment.ScopeID,
-				"period_start": start,
-				"period_end":   end,
-				"budget_quota": period.quota,
-				"currency":     "quota",
-				"status":       StatusEnabled,
-				"source_type":  BudgetSourcePolicy,
-				"source_id":    assignment.Policy.ID,
-				"period_kind":  period.kind,
+				"scope_type":            assignment.ScopeType,
+				"scope_id":              assignment.ScopeID,
+				"period_start":          start,
+				"period_end":            end,
+				"budget_quota":          period.quota,
+				"budget_amount":         period.amount,
+				"budget_currency":       periodCurrency,
+				"budget_quota_per_unit": period.quotaPerUnit,
+				"budget_exchange_rate":  period.exchangeRate,
+				"currency":              periodCurrency,
+				"status":                StatusEnabled,
+				"source_type":           BudgetSourcePolicy,
+				"source_id":             assignment.Policy.ID,
+				"period_kind":           period.kind,
 			}
 			if err := a.db.Model(&BudgetAccount{}).Where("id = ?", account.ID).Updates(updates).Error; err != nil {
 				return err
