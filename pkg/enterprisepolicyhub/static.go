@@ -91,6 +91,193 @@ const indexHTML = `<!doctype html>
       align-items: start;
     }
     .management-grid > .panel { min-width: 0; }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .section-heading p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .org-explorer { margin-top: 16px; }
+    .org-filter-bar {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) 180px 160px auto;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+    .org-filter-bar label { margin: 0; }
+    .org-tree-scroll {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .org-tree-grid {
+      min-width: 1120px;
+      display: grid;
+      grid-template-columns: minmax(310px, 1.7fr) 130px minmax(200px, 1.1fr) 150px minmax(180px, 1fr) 100px 210px;
+    }
+    .org-tree-header { display: contents; }
+    .org-tree-header > div {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .org-tree-row { display: contents; }
+    .org-tree-row > div {
+      min-width: 0;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .org-tree-row:last-child > div { border-bottom: 0; }
+    .org-tree-row:hover > div { background: #f8fbfb; }
+    .org-tree-row.selected > div { background: #eefaf8; }
+    .org-node-cell {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+    }
+    .org-node-indent {
+      flex: 0 0 auto;
+      width: calc(var(--org-depth) * 20px);
+      min-height: 1px;
+    }
+    .org-tree-toggle, .org-tree-spacer {
+      flex: 0 0 24px;
+      width: 24px;
+      height: 24px;
+    }
+    .org-tree-toggle {
+      display: inline-grid;
+      place-items: center;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .org-tree-toggle:hover { background: #e7f5f3; color: var(--brand-dark); }
+    .org-tree-toggle[aria-expanded="true"] { transform: rotate(90deg); }
+    .org-node-main { min-width: 0; }
+    .org-name-button {
+      display: block;
+      max-width: 100%;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+    .org-name-button:hover { color: var(--brand-dark); text-decoration: underline; }
+    .org-node-path, .org-cell-source {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .org-type-badge, .org-source-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 7px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #f8fafc;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .org-source-badge { margin-left: 5px; color: var(--brand-dark); border-color: #b7ded9; background: #eefaf8; }
+    .org-status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: #98a2b3;
+    }
+    .org-status-dot.enabled { background: #079455; }
+    .org-tree-empty { padding: 28px; color: var(--muted); text-align: center; }
+    .org-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: none;
+      justify-content: flex-end;
+      background: rgba(15, 23, 42, .36);
+    }
+    .org-drawer-backdrop.open { display: flex; }
+    .org-drawer {
+      width: min(560px, 100vw);
+      height: 100%;
+      overflow-y: auto;
+      background: var(--panel);
+      box-shadow: -12px 0 28px rgba(15, 23, 42, .16);
+    }
+    .org-drawer-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .96);
+    }
+    .org-drawer-close {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 34px;
+      width: 34px;
+      height: 34px;
+      border: 0;
+      border-radius: 6px;
+      background: #eef2f7;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 20px;
+    }
+    .org-breadcrumb { margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .org-drawer-body { padding: 18px 20px 28px; }
+    .org-effective-summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 18px;
+      margin-bottom: 18px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .org-effective-item { padding: 11px 0; }
+    .org-effective-item .label { color: var(--muted); font-size: 11px; }
+    .org-effective-item .value { margin-top: 3px; font-weight: 600; overflow-wrap: anywhere; }
+    .org-form-actions {
+      position: sticky;
+      bottom: 0;
+      margin: 18px -20px -28px;
+      padding: 14px 20px;
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, .96);
+    }
     .report-grid { grid-template-columns: 1fr; }
     .panel {
       background: var(--panel);
@@ -290,6 +477,9 @@ const indexHTML = `<!doctype html>
         width: auto;
         white-space: nowrap;
       }
+      .section-heading { align-items: stretch; flex-direction: column; }
+      .org-filter-bar { grid-template-columns: 1fr; }
+      .org-effective-summary { grid-template-columns: 1fr; }
     }
     @media (max-width: 1180px) {
       .management-grid { grid-template-columns: 1fr; }
@@ -337,50 +527,95 @@ const indexHTML = `<!doctype html>
       </section>
 
       <section id="orgs">
-        <h2>组织架构</h2>
-        <div class="grid management-grid">
-          <form class="panel" id="org-form">
-            <h3 id="org-form-title">创建组织节点</h3>
-            <label><span>名称 <span class="required-mark" aria-hidden="true">*</span></span><input name="name" required></label>
-            <label>编码 <input name="code"></label>
-            <label>父级组织
-              <select name="parent_id" data-ref-select="org_units" data-placeholder="顶层组织"></select>
-              <span class="hint">从 Hub 已有组织读取；留空表示创建顶层组织。</span>
+        <div class="section-heading">
+          <div>
+            <h2>组织架构</h2>
+            <p>按层级查看组织节点，以及 Policy、group 和所属账号的实际来源。</p>
+          </div>
+          <button class="primary" type="button" onclick="beginOrgCreate(0)">创建顶层组织</button>
+        </div>
+        <div class="panel org-explorer">
+          <div class="org-filter-bar">
+            <label>搜索组织
+              <input id="org-search" type="search" data-placeholder="输入名称、编码或 ID" placeholder="输入名称、编码或 ID">
             </label>
-            <label>类型
-              <select name="type">
-                <option value="department">department</option>
-                <option value="company">company</option>
-                <option value="business_unit">business_unit</option>
-                <option value="team">team</option>
-                <option value="project">project</option>
-                <option value="cost_center">cost_center</option>
+            <label>组织类型
+              <select id="org-type-filter">
+                <option value="">全部类型</option>
+                <option value="company">公司</option>
+                <option value="business_unit">事业部</option>
+                <option value="department">部门</option>
+                <option value="team">团队</option>
+                <option value="project">项目</option>
+                <option value="cost_center">成本中心</option>
               </select>
             </label>
-            <label>默认 Policy
-              <select name="default_policy_id" data-ref-select="policies" data-placeholder="不绑定，按上级继承"></select>
-            </label>
-            <label>默认 group
-              <select name="default_group" data-ref-select="groups" data-placeholder="不覆盖"></select>
-            </label>
-            <label>所属账号
-              <select name="newapi_user_id" data-ref-select="users" data-placeholder="继承或稍后指定"></select>
-            </label>
             <label>状态
-              <select name="status">
+              <select id="org-status-filter">
+                <option value="">全部状态</option>
                 <option value="enabled">启用</option>
                 <option value="disabled">禁用</option>
               </select>
             </label>
-            <div class="toolbar">
-              <button class="primary" id="org-submit" type="submit">创建</button>
-              <button class="secondary" id="org-cancel-edit" type="button" onclick="resetOrgForm()" hidden>取消编辑</button>
+            <div class="filter-actions">
+              <button class="secondary" type="button" onclick="expandAllOrgs()">全部展开</button>
+              <button class="secondary" type="button" onclick="collapseAllOrgs()">全部收起</button>
             </div>
-          </form>
-          <div class="panel">
-            <h3>组织列表</h3>
-            <div id="org-table"></div>
           </div>
+          <div id="org-tree"></div>
+        </div>
+
+        <div class="org-drawer-backdrop" id="org-drawer" aria-hidden="true" onclick="handleOrgDrawerBackdrop(event)">
+          <aside class="org-drawer" role="dialog" aria-modal="true" aria-labelledby="org-form-title">
+            <div class="org-drawer-header">
+              <div>
+                <h3 id="org-form-title">创建组织节点</h3>
+                <div class="org-breadcrumb" id="org-breadcrumb">顶层组织</div>
+              </div>
+              <button class="org-drawer-close" type="button" onclick="closeOrgDrawer()" title="关闭" aria-label="关闭">&times;</button>
+            </div>
+            <div class="org-drawer-body">
+              <div class="org-effective-summary" id="org-effective-summary" hidden></div>
+              <form id="org-form">
+                <label><span>名称 <span class="required-mark" aria-hidden="true">*</span></span><input name="name" required></label>
+                <label>编码 <input name="code"></label>
+                <label>父级组织
+                  <select name="parent_id" data-ref-select="org_units" data-placeholder="顶层组织"></select>
+                  <span class="hint">创建下级时自动选择父组织；现有节点暂不支持移动。</span>
+                </label>
+                <label>类型
+                  <select name="type">
+                    <option value="department">部门</option>
+                    <option value="company">公司</option>
+                    <option value="business_unit">事业部</option>
+                    <option value="team">团队</option>
+                    <option value="project">项目</option>
+                    <option value="cost_center">成本中心</option>
+                  </select>
+                </label>
+                <label>默认 Policy
+                  <select name="default_policy_id" data-ref-select="policies" data-placeholder="不绑定，按上级继承"></select>
+                </label>
+                <label>默认 group
+                  <select name="default_group" data-ref-select="groups" data-placeholder="不覆盖"></select>
+                </label>
+                <label>所属账号
+                  <select name="newapi_user_id" data-ref-select="users" data-placeholder="稍后指定"></select>
+                  <span class="hint">企业令牌继承当前组织节点的所属账号，不会继续向上级组织查找。</span>
+                </label>
+                <label>状态
+                  <select name="status">
+                    <option value="enabled">启用</option>
+                    <option value="disabled">禁用</option>
+                  </select>
+                </label>
+                <div class="toolbar org-form-actions">
+                  <button class="primary" id="org-submit" type="submit">创建</button>
+                  <button class="secondary" type="button" onclick="closeOrgDrawer()">取消</button>
+                </div>
+              </form>
+            </div>
+          </aside>
         </div>
       </section>
 
@@ -644,7 +879,10 @@ const indexHTML = `<!doctype html>
     const pageBase = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
     const apiBase = pageBase + 'api/';
     const state = {
-      language: window.localStorage.getItem('eph-language') === 'en' ? 'en' : 'zh'
+      language: window.localStorage.getItem('eph-language') === 'en' ? 'en' : 'zh',
+      orgExpanded: {},
+      orgTreeInitialized: false,
+      selectedOrgId: 0
     };
     const en = {
       '语言': 'Language', '刷新': 'Refresh', '同步用量': 'Sync usage', '概览': 'Overview',
@@ -709,7 +947,19 @@ const indexHTML = `<!doctype html>
       'pending': 'Pending', 'confirmed': 'Confirmed', 'failed': 'Failed', 'success': 'Success',
       'manual': 'Manual', 'policy': 'Policy', 'daily': 'Daily', 'monthly': 'Monthly', 'custom': 'Custom',
       'org_unit': 'Organization', 'enterprise_key': 'Enterprise token', 'key': 'Enterprise token',
-      'model': 'Model', 'channel': 'Channel'
+      'model': 'Model', 'channel': 'Channel',
+      '按层级查看组织节点，以及 Policy、group 和所属账号的实际来源。': 'Browse the organization hierarchy and the actual sources of policies, groups, and account owners.',
+      '创建顶层组织': 'Create root organization', '搜索组织': 'Search organizations', '输入名称、编码或 ID': 'Search by name, code, or ID',
+      '组织类型': 'Organization type', '全部类型': 'All types', '全部状态': 'All statuses', '全部展开': 'Expand all', '全部收起': 'Collapse all',
+      '展开': 'Expand', '收起': 'Collapse',
+      '公司': 'Company', '事业部': 'Business unit', '部门': 'Department', '团队': 'Team',
+      '组织节点': 'Organization', '生效 Policy 链': 'Effective policy chain', '生效 group': 'Effective group',
+      '直接配置': 'Direct', '继承自 {name}': 'Inherited from {name}', '由 Policy {name} 设置': 'Set by policy {name}',
+      '未设置': 'Not set', '没有符合条件的组织节点': 'No organizations match the filters', '添加下级': 'Add child',
+      '关闭': 'Close', '取消': 'Cancel', '创建下级组织': 'Create child organization',
+      '创建下级时自动选择父组织；现有节点暂不支持移动。': 'The parent is selected automatically when creating a child. Existing nodes cannot be moved yet.',
+      '稍后指定': 'Specify later', '企业令牌继承当前组织节点的所属账号，不会继续向上级组织查找。': 'Enterprise tokens inherit the account owner from this organization only; parent organizations are not searched.',
+      '月预算': 'Monthly budget', '日预算': 'Daily budget', 'Policy 交集': 'Policy intersection', '本级备用值': 'Direct fallback'
     };
 
     function t(key, values) {
@@ -736,6 +986,7 @@ const indexHTML = `<!doctype html>
       document.querySelectorAll('[data-placeholder]').forEach(element => {
         if (!element.dataset.i18nPlaceholder) element.dataset.i18nPlaceholder = element.dataset.placeholder;
         element.dataset.placeholder = t(element.dataset.i18nPlaceholder);
+        if ('placeholder' in element) element.placeholder = element.dataset.placeholder;
       });
     }
 
@@ -804,6 +1055,45 @@ const indexHTML = `<!doctype html>
       populateReferenceControls();
     }
 
+    function organizationTreeRows(rows) {
+      const ordered = Array.isArray(rows) ? rows : [];
+      const byID = new Map(ordered.map(row => [Number(row.id), row]));
+      const children = new Map();
+      const roots = [];
+      for (const row of ordered) {
+        const parentID = Number(row.parent_id || 0);
+        if (!parentID || !byID.has(parentID) || parentID === Number(row.id)) {
+          roots.push(row);
+          continue;
+        }
+        if (!children.has(parentID)) children.set(parentID, []);
+        children.get(parentID).push(row);
+      }
+      const result = [];
+      const visited = new Set();
+      function walk(row, depth) {
+        const id = Number(row.id);
+        if (visited.has(id)) return;
+        visited.add(id);
+        result.push({ row, depth, children: children.get(id) || [] });
+        for (const child of children.get(id) || []) walk(child, depth + 1);
+      }
+      for (const root of roots) walk(root, 0);
+      for (const row of ordered) {
+        if (!visited.has(Number(row.id))) walk(row, 0);
+      }
+      return result;
+    }
+
+    function organizationOptions(rows) {
+      return organizationTreeRows(rows).map(item => ({
+        value: item.row.id,
+        label: (item.depth ? Array(item.depth + 1).join('  ') + '↳ ' : '') + item.row.name +
+          ' (ID: ' + item.row.id + ') / ' + orgTypeLabel(item.row.type) +
+          (item.row.default_group ? ' / ' + item.row.default_group : ''),
+      }));
+    }
+
     function populateReferenceControls() {
       const ref = state.reference || {};
       fillReferenceSelects('groups', (ref.groups || []).map(value => ({ value, label: value })));
@@ -812,10 +1102,7 @@ const indexHTML = `<!doctype html>
         value: user.id,
         label: user.username + (user.display_name ? ' / ' + user.display_name : '') + ' (ID: ' + user.id + ') / ' + user.group,
       })), { numeric: true });
-      fillReferenceSelects('org_units', (ref.org_units || []).map(org => ({
-        value: org.id,
-        label: org.name + ' (ID: ' + org.id + ') / ' + t(org.type) + (org.default_group ? ' / ' + org.default_group : ''),
-      })), { numeric: true });
+      fillReferenceSelects('org_units', organizationOptions(ref.org_units || []), { numeric: true });
       fillReferenceSelects('projects', (ref.org_units || []).filter(org => org.type === 'project').map(org => ({
         value: org.id,
         label: org.name + ' (ID: ' + org.id + ')',
@@ -911,6 +1198,19 @@ const indexHTML = `<!doctype html>
       return t(String(value));
     }
 
+    function orgTypeLabel(value) {
+      if (state.language === 'en') return t(String(value || ''));
+      return ({
+        company: '公司', business_unit: '事业部', department: '部门', team: '团队',
+        project: '项目', cost_center: '成本中心'
+      })[value] || String(value || '');
+    }
+
+    function orgStatusLabel(value) {
+      if (state.language === 'en') return t(String(value || ''));
+      return ({ enabled: '启用', disabled: '禁用' })[value] || String(value || '');
+    }
+
     function updateBudgetScopeOptions() {
       const form = document.getElementById('budget-form');
       if (!form) return;
@@ -959,28 +1259,155 @@ const indexHTML = `<!doctype html>
       input.value = value === null || value === undefined ? '' : String(value);
     }
 
+    function orgRow(id) {
+      const numericID = Number(id || 0);
+      return (state.orgs || []).find(item => Number(item.id) === numericID) || null;
+    }
+
+    function policyRow(id) {
+      const numericID = Number(id || 0);
+      return (state.policies || []).find(item => Number(item.id) === numericID) || referenceItem('policies', numericID);
+    }
+
+    function orgChain(row) {
+      const chain = [];
+      const visited = new Set();
+      let current = row;
+      while (current && !visited.has(Number(current.id))) {
+        visited.add(Number(current.id));
+        chain.unshift(current);
+        current = orgRow(current.parent_id);
+      }
+      return chain;
+    }
+
+    function orgBreadcrumb(row) {
+      return row ? orgChain(row).map(item => item.name).join(' / ') : t('顶层组织');
+    }
+
+    function effectiveOrgConfiguration(row) {
+      const policies = [];
+      const seen = new Set();
+      let effectiveGroup = '';
+      let groupSource = null;
+      let monthlyBudget = 0;
+      let dailyBudget = 0;
+      for (const org of orgChain(row)) {
+        const policy = policyRow(org.default_policy_id);
+        if (!policy || policy.status !== 'enabled' || seen.has(Number(policy.id))) continue;
+        seen.add(Number(policy.id));
+        policies.push({ policy, org });
+        if (policy.default_group) {
+          effectiveGroup = policy.default_group;
+          groupSource = { kind: 'policy', name: policy.name, org };
+        }
+        const monthly = Number(policy.monthly_budget_quota || 0);
+        const daily = Number(policy.daily_budget_quota || 0);
+        if (monthly > 0 && (!monthlyBudget || monthly < monthlyBudget)) monthlyBudget = monthly;
+        if (daily > 0 && (!dailyBudget || daily < dailyBudget)) dailyBudget = daily;
+      }
+      if (!effectiveGroup && row.default_group) {
+        effectiveGroup = row.default_group;
+        groupSource = { kind: 'org', name: row.name, org: row };
+      }
+      return {
+        policies,
+        effectiveGroup,
+        groupSource,
+        monthlyBudget,
+        dailyBudget,
+        account: referenceItem('users', row.newapi_user_id),
+      };
+    }
+
+    function renderOrgDrawerSummary(row) {
+      const summary = document.getElementById('org-effective-summary');
+      if (!row) {
+        summary.hidden = true;
+        summary.innerHTML = '';
+        return;
+      }
+      const effective = effectiveOrgConfiguration(row);
+      const policyText = effective.policies.length
+        ? effective.policies.map(item => item.policy.name).join(' ∩ ')
+        : t('未设置');
+      const policySource = effective.policies.length > 1 ? t('Policy 交集') :
+        effective.policies.length === 1 ? effective.policies[0].org.name : '';
+      const groupSource = effective.groupSource
+        ? effective.groupSource.kind === 'policy'
+          ? t('由 Policy {name} 设置', { name: effective.groupSource.name })
+          : t('本级备用值')
+        : '';
+      const accountName = effective.account
+        ? (effective.account.username || effective.account.display_name) + ' (ID: ' + effective.account.id + ')'
+        : t('未设置');
+      const budgetText = (effective.monthlyBudget || effective.dailyBudget)
+        ? t('月预算') + ': ' + (effective.monthlyBudget || t('不限')) + ' / ' +
+          t('日预算') + ': ' + (effective.dailyBudget || t('不限'))
+        : t('未设置');
+      summary.hidden = false;
+      summary.innerHTML =
+        '<div class="org-effective-item"><div class="label">' + escapeHTML(t('生效 Policy 链')) + '</div><div class="value">' + escapeHTML(policyText) + '</div>' +
+          (policySource ? '<div class="org-cell-source">' + escapeHTML(policySource) + '</div>' : '') + '</div>' +
+        '<div class="org-effective-item"><div class="label">' + escapeHTML(t('生效 group')) + '</div><div class="value">' + escapeHTML(effective.effectiveGroup || t('未设置')) + '</div>' +
+          (groupSource ? '<div class="org-cell-source">' + escapeHTML(groupSource) + '</div>' : '') + '</div>' +
+        '<div class="org-effective-item"><div class="label">' + escapeHTML(t('所属账号')) + '</div><div class="value">' + escapeHTML(accountName) + '</div></div>' +
+        '<div class="org-effective-item"><div class="label">' + escapeHTML(t('预算')) + '</div><div class="value">' + escapeHTML(budgetText) + '</div></div>';
+    }
+
+    function openOrgDrawer() {
+      const drawer = document.getElementById('org-drawer');
+      drawer.classList.add('open');
+      drawer.setAttribute('aria-hidden', 'false');
+      window.setTimeout(() => document.querySelector('#org-form input[name="name"]').focus(), 0);
+    }
+
+    function closeOrgDrawer() {
+      const drawer = document.getElementById('org-drawer');
+      drawer.classList.remove('open');
+      drawer.setAttribute('aria-hidden', 'true');
+      resetOrgForm();
+    }
+
+    function handleOrgDrawerBackdrop(event) {
+      if (event.target === document.getElementById('org-drawer')) closeOrgDrawer();
+    }
+
+    function beginOrgCreate(parentID) {
+      switchTab('orgs');
+      resetOrgForm();
+      const parent = orgRow(parentID);
+      const form = document.getElementById('org-form');
+      setFormValue(form, 'parent_id', parent ? parent.id : 0);
+      document.getElementById('org-form-title').textContent = parent ? t('创建下级组织') : t('创建顶层组织');
+      document.getElementById('org-breadcrumb').textContent = parent
+        ? orgBreadcrumb(parent) + ' / ' + t('创建')
+        : t('顶层组织');
+      openOrgDrawer();
+    }
+
     function beginOrgEdit(id) {
-      const row = (state.orgs || []).find(item => item.id === id);
+      const row = orgRow(id);
       if (!row) return;
       switchTab('orgs');
       state.editingOrgId = id;
+      state.selectedOrgId = id;
       const form = document.getElementById('org-form');
       ['name', 'code', 'parent_id', 'type', 'default_policy_id', 'default_group', 'newapi_user_id', 'status']
         .forEach(name => setFormValue(form, name, row[name]));
       form.elements.parent_id.disabled = true;
-      document.getElementById('org-form-title').textContent = t('编辑') + ' ' + t('组织') + ' #' + id;
+      document.getElementById('org-form-title').textContent = t('编辑') + ' ' + row.name + ' #' + id;
+      document.getElementById('org-breadcrumb').textContent = orgBreadcrumb(row);
       document.getElementById('org-submit').textContent = t('保存修改');
-      document.getElementById('org-cancel-edit').hidden = false;
-      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      renderOrgDrawerSummary(row);
+      renderOrgTree();
+      openOrgDrawer();
     }
 
     function beginTypedOrgCreate(type) {
-      switchTab('orgs');
-      resetOrgForm();
-      const form = document.getElementById('org-form');
-      setFormValue(form, 'type', type);
+      beginOrgCreate(0);
+      setFormValue(document.getElementById('org-form'), 'type', type);
       document.getElementById('org-form-title').textContent = t('创建') + ' ' + t(type);
-      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function resetOrgForm() {
@@ -989,8 +1416,9 @@ const indexHTML = `<!doctype html>
       form.reset();
       form.elements.parent_id.disabled = false;
       document.getElementById('org-form-title').textContent = t('创建组织节点');
+      document.getElementById('org-breadcrumb').textContent = t('顶层组织');
       document.getElementById('org-submit').textContent = t('创建');
-      document.getElementById('org-cancel-edit').hidden = true;
+      renderOrgDrawerSummary(null);
     }
 
     function beginPolicyEdit(id) {
@@ -1075,7 +1503,9 @@ const indexHTML = `<!doctype html>
       if (!window.confirm(message)) return;
       try {
         await api('org-units/' + id, { method: 'DELETE' });
-        if (state.editingOrgId === id) resetOrgForm();
+        if (state.editingOrgId === id) closeOrgDrawer();
+        if (state.selectedOrgId === id) state.selectedOrgId = 0;
+        delete state.orgExpanded[id];
         await Promise.all([loadReference(), loadOrgs()]);
       } catch (error) { showError(error); }
     }
@@ -1220,18 +1650,112 @@ const indexHTML = `<!doctype html>
       renderJSON('me-json', { username: me.username, hub_role: me.hub_role, scope_org_unit_id: me.scope_org_unit_id || 0 });
     }
 
+    function orgMatchesFilters(row) {
+      const search = String(document.getElementById('org-search').value || '').trim().toLowerCase();
+      const type = document.getElementById('org-type-filter').value;
+      const status = document.getElementById('org-status-filter').value;
+      const searchable = [row.name, row.code, row.id].join(' ').toLowerCase();
+      return (!search || searchable.includes(search)) && (!type || row.type === type) && (!status || row.status === status);
+    }
+
+    function renderOrgTree() {
+      const rows = state.orgs || [];
+      const entries = organizationTreeRows(rows);
+      if (!state.orgTreeInitialized) {
+        for (const item of entries) {
+          if (item.children.length) state.orgExpanded[item.row.id] = true;
+        }
+        state.orgTreeInitialized = true;
+      }
+
+      const search = String(document.getElementById('org-search').value || '').trim();
+      const type = document.getElementById('org-type-filter').value;
+      const status = document.getElementById('org-status-filter').value;
+      const filtering = Boolean(search || type || status);
+      const included = new Set();
+      if (filtering) {
+        for (const row of rows) {
+          if (!orgMatchesFilters(row)) continue;
+          for (const ancestor of orgChain(row)) included.add(Number(ancestor.id));
+        }
+      }
+
+      const visible = entries.filter(item => {
+        const row = item.row;
+        if (filtering) return included.has(Number(row.id));
+        let parent = orgRow(row.parent_id);
+        while (parent) {
+          if (state.orgExpanded[parent.id] === false) return false;
+          parent = orgRow(parent.parent_id);
+        }
+        return true;
+      });
+
+      const header = [t('组织节点'), t('类型'), t('生效 Policy 链'), t('生效 group'), t('所属账号'), t('状态'), t('操作')]
+        .map(label => '<div>' + escapeHTML(label) + '</div>').join('');
+      const body = visible.map(item => {
+        const row = item.row;
+        const effective = effectiveOrgConfiguration(row);
+        const hasChildren = item.children.length > 0;
+        const toggle = hasChildren
+          ? '<button class="org-tree-toggle" type="button" aria-label="' + escapeHTML(t(state.orgExpanded[row.id] === false ? '展开' : '收起')) + '" aria-expanded="' +
+            (state.orgExpanded[row.id] === false ? 'false' : 'true') + '" onclick="toggleOrgNode(' + row.id + ')">›</button>'
+          : '<span class="org-tree-spacer"></span>';
+        const policyText = effective.policies.length
+          ? effective.policies.map(entry => entry.policy.name).join(' ∩ ')
+          : t('未设置');
+        const policySource = effective.policies.length
+          ? effective.policies.map(entry => entry.org.name).join(' → ')
+          : '';
+        let groupSource = '';
+        if (effective.groupSource) {
+          groupSource = effective.groupSource.kind === 'policy'
+            ? t('由 Policy {name} 设置', { name: effective.groupSource.name })
+            : t('直接配置');
+        }
+        const accountName = effective.account
+          ? (effective.account.username || effective.account.display_name || ('#' + effective.account.id)) + ' (ID: ' + effective.account.id + ')'
+          : t('未设置');
+        const selected = Number(state.selectedOrgId) === Number(row.id) ? ' selected' : '';
+        return '<div class="org-tree-row' + selected + '">' +
+          '<div><div class="org-node-cell"><span class="org-node-indent" style="--org-depth:' + item.depth + '"></span>' + toggle +
+            '<div class="org-node-main"><button class="org-name-button" type="button" onclick="beginOrgEdit(' + row.id + ')">' + escapeHTML(row.name) + '</button>' +
+            '<div class="org-node-path">' + escapeHTML(orgBreadcrumb(row)) + (row.code ? ' · ' + escapeHTML(row.code) : '') + ' · #' + row.id + '</div></div></div></div>' +
+          '<div><span class="org-type-badge">' + escapeHTML(orgTypeLabel(row.type)) + '</span></div>' +
+          '<div>' + escapeHTML(policyText) + (policySource ? '<div class="org-cell-source">' + escapeHTML(policySource) + '</div>' : '') + '</div>' +
+          '<div>' + escapeHTML(effective.effectiveGroup || t('未设置')) + (groupSource ? '<div class="org-cell-source">' + escapeHTML(groupSource) + '</div>' : '') + '</div>' +
+          '<div>' + escapeHTML(accountName) + (effective.account ? '<span class="org-source-badge">' + escapeHTML(t('直接配置')) + '</span>' : '') + '</div>' +
+          '<div><span class="org-status-dot ' + escapeHTML(row.status) + '"></span>' + escapeHTML(orgStatusLabel(row.status)) + '</div>' +
+          '<div><div class="row-actions"><button class="secondary" type="button" onclick="beginOrgCreate(' + row.id + ')">' + escapeHTML(t('添加下级')) + '</button>' +
+            '<button class="secondary" type="button" onclick="beginOrgEdit(' + row.id + ')">' + escapeHTML(t('编辑')) + '</button>' +
+            '<button class="danger" type="button" onclick="deleteOrg(' + row.id + ')">' + escapeHTML(t('删除')) + '</button></div></div>' +
+          '</div>';
+      }).join('');
+
+      document.getElementById('org-tree').innerHTML = body
+        ? '<div class="org-tree-scroll"><div class="org-tree-grid"><div class="org-tree-header">' + header + '</div>' + body + '</div></div>'
+        : '<div class="org-tree-empty">' + escapeHTML(t('没有符合条件的组织节点')) + '</div>';
+    }
+
+    function toggleOrgNode(id) {
+      state.orgExpanded[id] = state.orgExpanded[id] === false;
+      renderOrgTree();
+    }
+
+    function expandAllOrgs() {
+      for (const row of state.orgs || []) state.orgExpanded[row.id] = true;
+      renderOrgTree();
+    }
+
+    function collapseAllOrgs() {
+      for (const row of state.orgs || []) state.orgExpanded[row.id] = false;
+      renderOrgTree();
+    }
+
     async function loadOrgs() {
       const rows = await api('org-units');
       state.orgs = rows;
-      document.getElementById('org-table').innerHTML = table(rows, [
-        { key: 'id', label: 'ID', className: 'cell-compact', format: recordID },
-        { key: 'name', label: '名称', className: 'cell-medium' }, { key: 'type', label: '类型', format: translatedValue },
-        { key: 'path', label: '路径', className: 'cell-wide' }, { key: 'default_group', label: 'group', className: 'cell-medium' },
-        { key: 'default_policy_id', label: 'Policy', className: 'cell-medium', format: value => namedID('policies', value, 'Policy') },
-        { key: 'newapi_user_id', label: '所属账号', className: 'cell-medium', format: value => namedID('users', value, t('所属账号')) },
-        { key: 'status', label: '状态', format: translatedValue }
-      ], row => '<div class="row-actions"><button class="secondary" onclick="beginOrgEdit(' + row.id + ')">' + t('编辑') + '</button>' +
-        '<button class="danger" onclick="deleteOrg(' + row.id + ')">' + t('删除') + '</button></div>');
+      renderOrgTree();
     }
 
     async function loadPolicies() {
@@ -1246,6 +1770,7 @@ const indexHTML = `<!doctype html>
         { key: 'key_default_quota', label: 'Key quota' }, { key: 'status', label: '状态', format: translatedValue }
       ], row => '<div class="row-actions"><button class="secondary" onclick="beginPolicyEdit(' + row.id + ')">' + t('编辑') + '</button>' +
         '<button class="danger" onclick="deletePolicy(' + row.id + ')">' + t('删除') + '</button></div>');
+      if (state.orgs) renderOrgTree();
     }
 
     async function loadKeys() {
@@ -1471,6 +1996,11 @@ const indexHTML = `<!doctype html>
     }
 
     document.querySelectorAll('nav button').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
+    document.getElementById('org-search').addEventListener('input', renderOrgTree);
+    ['org-type-filter', 'org-status-filter'].forEach(id => document.getElementById(id).addEventListener('change', renderOrgTree));
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && document.getElementById('org-drawer').classList.contains('open')) closeOrgDrawer();
+    });
     document.getElementById('usage-group').addEventListener('change', loadUsage);
     ['usage-org', 'usage-key', 'usage-model', 'usage-channel', 'usage-project', 'usage-cost-center']
       .forEach(id => document.getElementById(id).addEventListener('change', loadUsage));
@@ -1489,7 +2019,7 @@ const indexHTML = `<!doctype html>
         const current = id ? (state.orgs || []).find(item => item.id === id) : null;
         const payload = Object.assign({}, current || {}, formJSON(event.target));
         await api(id ? 'org-units/' + id : 'org-units', { method: id ? 'PUT' : 'POST', body: JSON.stringify(payload) });
-        resetOrgForm();
+        closeOrgDrawer();
         await Promise.all([loadReference(), loadOrgs()]);
       } catch (error) { showError(error); }
     });
