@@ -15,6 +15,9 @@ Use -HwdramaProxyOnly to deploy or update only the Hwdrama material proxy
 without recreating the running new-api application container.
 Use -LocalDockerBuild to build the Docker image locally and upload an image tar
 instead of uploading a source archive for remote build.
+Use -BuildVersion to override the generated immutable version embedded in all
+binaries. By default it includes the nearest Git tag, UTC build time, commit,
+and a dirty suffix when -AllowDirty is used.
 Hwdrama proxy upstream routing is read only from routes.yml and secrets.env.
 reverse-newapi-volcengine is an optional sidecar that exposes Volcengine
 Seedance task paths and forwards them to the active new-api video endpoint.
@@ -30,6 +33,7 @@ param(
     [string]$PostgresContainer = "new-api-postgres",
     [string]$ImageRepository = "zooyf/new-api",
     [string]$ImageTag = "",
+    [string]$BuildVersion = "",
     [string]$Platform = "linux/amd64",
     [int]$HealthTimeoutSeconds = 180,
     [int]$HwdramaProxyPort = 3001,
@@ -83,33 +87,50 @@ function Get-CommandOutput {
     return ($output -join "`n").Trim()
 }
 
+function Copy-VersionedSourceTree {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    New-Item -ItemType Directory -Force -Path $DestinationRoot | Out-Null
+    $files = & git -C $SourceRoot ls-files --cached --others --exclude-standard
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed ($LASTEXITCODE): git -C $SourceRoot ls-files --cached --others --exclude-standard"
+    }
+
+    foreach ($relativePath in $files) {
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            continue
+        }
+        $sourcePath = Join-Path $SourceRoot ($relativePath -replace '/', [IO.Path]::DirectorySeparatorChar)
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            continue
+        }
+        $destinationPath = Join-Path $DestinationRoot ($relativePath -replace '/', [IO.Path]::DirectorySeparatorChar)
+        $destinationDir = Split-Path -Parent $destinationPath
+        New-Item -ItemType Directory -Force -Path $destinationDir | Out-Null
+        Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
+    }
+
+    [IO.File]::WriteAllText(
+        (Join-Path $DestinationRoot "VERSION"),
+        $Version,
+        [Text.Encoding]::ASCII
+    )
+}
+
 function New-SourceArchive {
     param(
         [Parameter(Mandatory = $true)][string]$SourceRoot,
-        [Parameter(Mandatory = $true)][string]$ArchivePath
+        [Parameter(Mandatory = $true)][string]$ArchivePath,
+        [Parameter(Mandatory = $true)][string]$Version
     )
 
     $stageRoot = Join-Path ([IO.Path]::GetTempPath()) ("new-api-source-" + [Guid]::NewGuid().ToString("N"))
-    New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
     try {
-        $files = & git -C $SourceRoot ls-files --cached --others --exclude-standard
-        if ($LASTEXITCODE -ne 0) {
-            throw "Command failed ($LASTEXITCODE): git -C $SourceRoot ls-files --cached --others --exclude-standard"
-        }
-
-        foreach ($relativePath in $files) {
-            if ([string]::IsNullOrWhiteSpace($relativePath)) {
-                continue
-            }
-            $sourcePath = Join-Path $SourceRoot ($relativePath -replace '/', [IO.Path]::DirectorySeparatorChar)
-            if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
-                continue
-            }
-            $destinationPath = Join-Path $stageRoot ($relativePath -replace '/', [IO.Path]::DirectorySeparatorChar)
-            $destinationDir = Split-Path -Parent $destinationPath
-            New-Item -ItemType Directory -Force -Path $destinationDir | Out-Null
-            Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
-        }
+        Copy-VersionedSourceTree -SourceRoot $SourceRoot -DestinationRoot $stageRoot -Version $Version
 
         if (Test-Path -LiteralPath $ArchivePath) {
             Remove-Item -LiteralPath $ArchivePath -Force
@@ -137,9 +158,18 @@ try {
         throw "Working tree has uncommitted or untracked changes. Commit them first, or pass -AllowDirty to deploy this exact working tree."
     }
 
+    $buildTimestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+    if (-not $BuildVersion) {
+        $baseVersion = Get-CommandOutput git describe --tags --abbrev=0 HEAD
+        $dirtySuffix = if ($workingTreeDirty) { ".dirty" } else { "" }
+        $BuildVersion = "$baseVersion.nexus.$buildTimestamp.g$sha$dirtySuffix"
+    }
+    if ($BuildVersion -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$') {
+        throw "BuildVersion must be a Docker-safe version containing only letters, digits, dots, underscores, and hyphens (maximum 128 characters)."
+    }
+
     if (-not $ImageTag) {
-        $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
-        $ImageTag = "nexus-$timestamp-$sha"
+        $ImageTag = $BuildVersion
     }
     $image = "${ImageRepository}:${ImageTag}"
 
@@ -147,6 +177,7 @@ try {
         Write-Host "Production deploy target: $RemoteHost $RemoteDir"
         Write-Host "Branch: $branch"
         Write-Host "Commit: $sha"
+        Write-Host "Version: $BuildVersion"
         Write-Host "Image:  $image"
         if ($LocalDockerBuild) {
             Write-Host "Build:  local Docker build, upload image tar"
@@ -182,7 +213,16 @@ try {
     Invoke-Remote "mkdir -p '$RemoteDir/releases' '$RemoteDir/backups'"
     if ($LocalDockerBuild) {
         Write-Host "Building Docker image $image locally..."
-        Invoke-External docker build --platform $Platform --pull -t $image $RepoRoot
+        $localBuildRoot = Join-Path ([IO.Path]::GetTempPath()) ("new-api-build-" + [Guid]::NewGuid().ToString("N"))
+        try {
+            Copy-VersionedSourceTree -SourceRoot $RepoRoot -DestinationRoot $localBuildRoot -Version $BuildVersion
+            Invoke-External docker build --platform $Platform --pull -t $image $localBuildRoot
+        }
+        finally {
+            if (Test-Path -LiteralPath $localBuildRoot) {
+                Remove-Item -LiteralPath $localBuildRoot -Recurse -Force
+            }
+        }
 
         Write-Host "Saving image to $localTar..."
         if (Test-Path $localTar) {
@@ -200,7 +240,7 @@ try {
         )
     } else {
         Write-Host "Packaging local source checkout to $localSourceTar..."
-        New-SourceArchive -SourceRoot $RepoRoot -ArchivePath $localSourceTar
+        New-SourceArchive -SourceRoot $RepoRoot -ArchivePath $localSourceTar -Version $BuildVersion
 
         Write-Host "Uploading source archive to ${RemoteHost}:$remoteSourceTar..."
         Invoke-External -FilePath scp -Arguments @(
@@ -229,6 +269,7 @@ proxy_service_name="$HwdramaProxyServiceName"
 reverse_service_name="$ReverseVolcengineServiceName"
 postgres_container="$PostgresContainer"
 image="$image"
+build_version="$BuildVersion"
 image_tar="$remoteTar"
 source_tar="$remoteSourceTar"
 safe_tag="$safeTag"
@@ -344,6 +385,13 @@ else
     echo "Building Docker image on remote host: `$image"
     docker build --platform "`$platform" --pull -t "`$image" "`$source_build_dir"
 fi
+
+image_version="`$(docker run --rm --entrypoint /new-api "`$image" --version)"
+if [ "`$image_version" != "`$build_version" ]; then
+    echo "Built image version mismatch: expected '`$build_version', got '`$image_version'." >&2
+    exit 1
+fi
+echo "Verified image version: `$image_version"
 
 app_env="`$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "`$service_name")"
 sql_dsn="`$(printf '%s\n' "`$app_env" | sed -n 's/^SQL_DSN=//p' | head -n 1)"
@@ -473,6 +521,8 @@ if [ "`$hwdrama_proxy_only" != "1" ]; then
 services:
   `$service_name:
     image: `$image
+    environment:
+      VERSION: ""
 EOF
 else
     cat > "`$active_override_file" <<EOF
@@ -565,7 +615,10 @@ while [ `$SECONDS -lt `$deadline ]; do
     if [ "`$hwdrama_proxy_only" = "1" ]; then
         new_api_ok=1
     elif curl -fsS http://127.0.0.1:3000/api/status 2>/dev/null | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'; then
-        new_api_ok=1
+        runtime_version="`$(docker exec "`$service_name" /new-api --version 2>/dev/null || true)"
+        if [ "`$runtime_version" = "`$build_version" ]; then
+            new_api_ok=1
+        fi
     fi
     if [ "`$hwdrama_proxy_enabled" != "1" ] || curl -fsS "http://127.0.0.1:`$hwdrama_proxy_port/healthz" 2>/dev/null | grep -q '^ok'; then
         proxy_ok=1
@@ -776,7 +829,7 @@ echo "Backup directory: `$backup_dir"
         Remove-Item -LiteralPath $localSourceTar -Force
     }
 
-    Write-Host "Deployment completed: $image"
+    Write-Host "Deployment completed: $image ($BuildVersion)"
 }
 finally {
     Pop-Location
