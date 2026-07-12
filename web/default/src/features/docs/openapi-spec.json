@@ -80,6 +80,14 @@
     },
     {
       "name": "Seedance 海外素材库"
+    },
+    {
+      "name": "移动视频素材库",
+      "description": "移动视频 AICC 素材组与素材管理接口。"
+    },
+    {
+      "name": "移动视频真人认证",
+      "description": "创建移动视频真人认证 H5 会话，并在认证完成后获取真人素材组。"
     }
   ],
   "paths": {
@@ -3146,6 +3154,322 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/asset-group/": {
+      "post": {
+        "summary": "创建素材组",
+        "deprecated": false,
+        "description": "创建移动视频 AICC 素材组。上传素材前需要先创建素材组，并保存响应中的 groupId。",
+        "operationId": "createCmccAICCAssetGroup",
+        "tags": [
+          "移动视频素材库"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CmccAICCAssetGroupCreateRequest"
+              },
+              "example": {
+                "groupName": "默认素材组",
+                "description": "用于图生视频",
+                "groupType": "AIGC"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "素材组创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CmccAICCAssetGroupResponse"
+                },
+                "example": {
+                  "body": {
+                    "groupId": "cmcc-group-id",
+                    "groupName": "默认素材组",
+                    "description": "用于图生视频",
+                    "groupType": "AIGC"
+                  }
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/asset/": {
+      "post": {
+        "summary": "上传素材",
+        "deprecated": false,
+        "description": "向指定移动视频 AICC 素材组上传素材。assetUrl 必须能由上游服务通过公网访问；成功后保存响应 body 中的素材 ID。",
+        "operationId": "createCmccAICCAsset",
+        "tags": [
+          "移动视频素材库"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CmccAICCAssetCreateRequest"
+              },
+              "example": {
+                "groupId": "cmcc-group-id",
+                "assetUrl": "https://example.com/person.png",
+                "assetName": "person-reference",
+                "assetType": "Image"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "素材上传请求成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CmccAICCAssetCreateResponse"
+                },
+                "example": {
+                  "body": "cmcc-asset-id"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/asset/query": {
+      "post": {
+        "summary": "查询素材列表",
+        "deprecated": false,
+        "description": "按素材组、素材类型和状态分页查询移动视频 AICC 素材。新上传素材通常需要等待状态变为 ACTIVE 后再用于视频生成。",
+        "operationId": "queryCmccAICCAssets",
+        "tags": [
+          "移动视频素材库"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CmccAICCAssetQueryRequest"
+              },
+              "example": {
+                "groupIds": [
+                  "cmcc-group-id"
+                ],
+                "groupType": "AIGC",
+                "assetType": "Image",
+                "statuses": [
+                  "ACTIVE"
+                ],
+                "pageNo": 1,
+                "pageSize": 20
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "成功返回素材列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CmccAICCAssetListResponse"
+                },
+                "example": {
+                  "body": {
+                    "data": [
+                      {
+                        "assetId": "cmcc-asset-id",
+                        "groupId": "cmcc-group-id",
+                        "assetName": "person-reference",
+                        "assetType": "Image",
+                        "assetUrl": "https://example.com/person.png",
+                        "status": "ACTIVE"
+                      }
+                    ],
+                    "total": 1
+                  }
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/asset/{asset_id}": {
+      "get": {
+        "summary": "查询素材",
+        "deprecated": false,
+        "description": "根据素材 ID 查询移动视频 AICC 素材详情和处理状态。",
+        "operationId": "getCmccAICCAsset",
+        "tags": [
+          "移动视频素材库"
+        ],
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "description": "上传素材接口返回的素材 ID",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cmcc-asset-id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功返回素材详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CmccAICCAssetResponse"
+                },
+                "example": {
+                  "body": {
+                    "assetId": "cmcc-asset-id",
+                    "groupId": "cmcc-group-id",
+                    "assetName": "person-reference",
+                    "assetType": "Image",
+                    "assetUrl": "https://example.com/person.png",
+                    "status": "ACTIVE"
+                  }
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/real-person-auth/sessions": {
+      "post": {
+        "summary": "创建真人认证会话",
+        "deprecated": false,
+        "description": "创建移动视频真人认证 H5 会话。客户端应引导用户打开响应中的 h5Link 完成认证，并保存 bytedToken 供后续查询真人素材组。",
+        "operationId": "createCmccAICCRealPersonSession",
+        "tags": [
+          "移动视频真人认证"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CmccAICCRealPersonSessionRequest"
+              },
+              "example": {
+                "callbackUrl": "https://example.com/callback"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "成功创建真人认证 H5 会话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CmccAICCRealPersonSessionResponse"
+                },
+                "example": {
+                  "body": {
+                    "bytedToken": "token-from-session",
+                    "h5Link": "https://h5.example.com/verify",
+                    "expiresIn": 1800
+                  }
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/real-person-auth/asset-group/by-byted-token": {
+      "post": {
+        "summary": "查询真人素材组",
+        "deprecated": false,
+        "description": "使用真人认证会话返回的 bytedToken 查询认证后创建的真人素材组。必须先在 h5Link 中完成真人认证；认证尚未完成时，上游会返回业务错误。",
+        "operationId": "getCmccAICCRealPersonAssetGroupByBytedToken",
+        "tags": [
+          "移动视频真人认证"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CmccAICCBytedTokenRequest"
+              },
+              "example": {
+                "bytedToken": "token-from-session"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "认证完成后成功返回真人素材组 ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CmccAICCBytedTokenAssetGroupResponse"
+                },
+                "example": {
+                  "body": "cmcc-real-person-group-id"
                 }
               }
             },
@@ -6264,6 +6588,345 @@
           }
         },
         "additionalProperties": true
+      },
+      "CmccAICCAssetGroupCreateRequest": {
+        "type": "object",
+        "description": "创建移动视频 AICC 素材组请求。",
+        "required": [
+          "groupName"
+        ],
+        "properties": {
+          "groupName": {
+            "type": "string",
+            "description": "素材组名称",
+            "example": "默认素材组"
+          },
+          "description": {
+            "type": "string",
+            "description": "素材组说明",
+            "example": "用于图生视频"
+          },
+          "groupType": {
+            "type": "string",
+            "description": "素材组类型",
+            "example": "AIGC"
+          }
+        }
+      },
+      "CmccAICCAssetGroup": {
+        "type": "object",
+        "description": "移动视频 AICC 素材组详情。",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "description": "素材组 ID",
+            "example": "cmcc-group-id"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "素材组名称",
+            "example": "默认素材组"
+          },
+          "description": {
+            "type": "string",
+            "description": "素材组说明"
+          },
+          "groupType": {
+            "type": "string",
+            "description": "素材组类型",
+            "example": "AIGC"
+          },
+          "createTime": {
+            "type": "string",
+            "description": "创建时间"
+          },
+          "updateTime": {
+            "type": "string",
+            "description": "更新时间"
+          }
+        },
+        "additionalProperties": true
+      },
+      "CmccAICCAssetGroupResponse": {
+        "type": "object",
+        "description": "创建素材组响应。",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/CmccAICCAssetGroup"
+          }
+        }
+      },
+      "CmccAICCAssetCreateRequest": {
+        "type": "object",
+        "description": "上传移动视频 AICC 素材请求。",
+        "required": [
+          "groupId",
+          "assetUrl"
+        ],
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "description": "目标素材组 ID",
+            "example": "cmcc-group-id"
+          },
+          "assetUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "上游可通过公网访问的素材 URL",
+            "example": "https://example.com/person.png"
+          },
+          "assetName": {
+            "type": "string",
+            "description": "素材名称",
+            "example": "person-reference"
+          },
+          "assetType": {
+            "type": "string",
+            "description": "素材类型",
+            "example": "Image"
+          }
+        }
+      },
+      "CmccAICCAssetCreateResponse": {
+        "type": "object",
+        "description": "上传素材响应。",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "创建的素材 ID",
+            "example": "cmcc-asset-id"
+          }
+        }
+      },
+      "CmccAICCAsset": {
+        "type": "object",
+        "description": "移动视频 AICC 素材详情。",
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "description": "素材 ID",
+            "example": "cmcc-asset-id"
+          },
+          "groupId": {
+            "type": "string",
+            "description": "素材组 ID",
+            "example": "cmcc-group-id"
+          },
+          "assetName": {
+            "type": "string",
+            "description": "素材名称",
+            "example": "person-reference"
+          },
+          "assetType": {
+            "type": "string",
+            "description": "素材类型",
+            "example": "Image"
+          },
+          "assetUrl": {
+            "type": "string",
+            "description": "素材 URL",
+            "example": "https://example.com/person.png"
+          },
+          "status": {
+            "type": "string",
+            "description": "素材状态",
+            "example": "ACTIVE"
+          },
+          "createTime": {
+            "type": "string",
+            "description": "创建时间"
+          },
+          "updateTime": {
+            "type": "string",
+            "description": "更新时间"
+          }
+        },
+        "additionalProperties": true
+      },
+      "CmccAICCAssetResponse": {
+        "type": "object",
+        "description": "查询单个素材响应。",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/CmccAICCAsset"
+          }
+        }
+      },
+      "CmccAICCAssetQueryRequest": {
+        "type": "object",
+        "description": "分页查询移动视频 AICC 素材请求。",
+        "required": [
+          "groupIds",
+          "pageNo",
+          "pageSize"
+        ],
+        "properties": {
+          "groupIds": {
+            "type": "array",
+            "description": "要查询的素材组 ID 列表",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "cmcc-group-id"
+            ]
+          },
+          "groupType": {
+            "type": "string",
+            "description": "素材组类型过滤条件",
+            "example": "AIGC"
+          },
+          "assetName": {
+            "type": "string",
+            "description": "素材名称过滤条件"
+          },
+          "assetType": {
+            "type": "string",
+            "description": "素材类型过滤条件",
+            "example": "Image"
+          },
+          "statuses": {
+            "type": "array",
+            "description": "素材状态过滤条件",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "ACTIVE"
+            ]
+          },
+          "pageNo": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "页码，从 1 开始",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "每页数量",
+            "example": 20
+          }
+        }
+      },
+      "CmccAICCAssetListBody": {
+        "type": "object",
+        "description": "素材列表分页数据。不同上游版本可能返回 data/total 或 dataRows/totalSize。",
+        "properties": {
+          "data": {
+            "type": "array",
+            "description": "素材列表",
+            "items": {
+              "$ref": "#/components/schemas/CmccAICCAsset"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "素材总数",
+            "example": 1
+          },
+          "dataRows": {
+            "type": "array",
+            "description": "部分上游版本使用的素材列表字段",
+            "items": {
+              "$ref": "#/components/schemas/CmccAICCAsset"
+            }
+          },
+          "totalSize": {
+            "type": "integer",
+            "description": "部分上游版本使用的素材总数字段",
+            "example": 1
+          },
+          "pageNo": {
+            "type": "integer",
+            "description": "当前页码",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页数量",
+            "example": 20
+          }
+        },
+        "additionalProperties": true
+      },
+      "CmccAICCAssetListResponse": {
+        "type": "object",
+        "description": "查询素材列表响应。",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/CmccAICCAssetListBody"
+          }
+        }
+      },
+      "CmccAICCRealPersonSessionRequest": {
+        "type": "object",
+        "description": "创建移动视频真人认证会话请求。",
+        "properties": {
+          "callbackUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "认证结果回调地址",
+            "example": "https://example.com/callback"
+          }
+        }
+      },
+      "CmccAICCRealPersonSessionBody": {
+        "type": "object",
+        "description": "真人认证 H5 会话信息。",
+        "properties": {
+          "bytedToken": {
+            "type": "string",
+            "description": "本次认证会话的 token",
+            "example": "token-from-session"
+          },
+          "h5Link": {
+            "type": "string",
+            "format": "uri",
+            "description": "供用户打开并完成真人认证的 H5 地址",
+            "example": "https://h5.example.com/verify"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "会话有效期，单位秒",
+            "example": 1800
+          }
+        },
+        "additionalProperties": true
+      },
+      "CmccAICCRealPersonSessionResponse": {
+        "type": "object",
+        "description": "创建真人认证会话响应。",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/CmccAICCRealPersonSessionBody"
+          }
+        }
+      },
+      "CmccAICCBytedTokenRequest": {
+        "type": "object",
+        "description": "根据认证会话 token 查询真人素材组请求。",
+        "required": [
+          "bytedToken"
+        ],
+        "properties": {
+          "bytedToken": {
+            "type": "string",
+            "description": "创建真人认证会话接口返回的 bytedToken",
+            "example": "token-from-session"
+          }
+        }
+      },
+      "CmccAICCBytedTokenAssetGroupResponse": {
+        "type": "object",
+        "description": "查询真人素材组响应。",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "认证完成后创建的真人素材组 ID",
+            "example": "cmcc-real-person-group-id"
+          }
+        }
       }
     },
     "responses": {},
