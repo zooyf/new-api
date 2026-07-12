@@ -70,6 +70,8 @@ $upstreamConfig = @"
 # Managed by scripts/set-nexus-canary.ps1.
 upstream new_api_backend {
     zone new_api_backend 64k;
+    # Keep one client on one slot so HTML and hashed frontend assets cannot mix.
+    hash `$remote_addr consistent;
 $blueLine
 $greenLine
     keepalive 32;

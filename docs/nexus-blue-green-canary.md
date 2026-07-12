@@ -107,5 +107,7 @@ multi-instance safety before canary traffic is enabled.
 ## Notes
 
 - Existing long-running stream requests stay on the slot that accepted them.
+- Nginx uses consistent client-IP hashing so one browser stays on one slot while
+  loading HTML and hashed frontend assets during a weighted canary.
 - Nginx reload is graceful, but switching weights only affects new requests.
 - `hwdrama-proxy` is independent and remains on its existing port/service.

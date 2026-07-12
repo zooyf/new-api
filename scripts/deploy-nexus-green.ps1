@@ -130,7 +130,7 @@ try {
         Invoke-External scp $localSourceTar "${RemoteHost}:$remoteSourceTar"
     } else {
         Write-Host "Building Docker image $image..."
-        Invoke-External docker build --platform $Platform --pull -t $image $RepoRoot
+        Invoke-External docker build --platform $Platform --pull --build-arg "BUILD_VERSION=$ImageTag" -t $image $RepoRoot
 
         Write-Host "Saving image to $localTar..."
         if (Test-Path $localTar) {
@@ -178,7 +178,7 @@ if [ "`$build_on_remote" = "true" ]; then
     rm -rf "`$build_dir"
     mkdir -p "`$build_dir"
     tar -xf "`$source_tar" -C "`$build_dir"
-    docker build --platform "`$platform" --pull -t "`$image" "`$build_dir"
+    docker build --platform "`$platform" --pull --build-arg "BUILD_VERSION=$ImageTag" -t "`$image" "`$build_dir"
 else
     echo "Loading image archive..."
     docker load -i "`$image_tar"
