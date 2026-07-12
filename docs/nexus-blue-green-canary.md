@@ -13,8 +13,8 @@ Nginx new_api_backend
 Both slots use the same PostgreSQL, Redis, data volume, and logs directory.
 ```
 
-The current production `new-api` container remains the blue slot. The green
-slot is created only when a candidate build is deployed.
+Blue and Green alternate as the active slot. A new release is always deployed
+to whichever slot Nginx currently marks `down`.
 
 ## One-Time Preparation
 
@@ -28,28 +28,42 @@ the managed upstream:
 This starts with `blue=100`, `green=0`; it should not change production traffic.
 The script backs up Nginx config, runs `nginx -t`, and reloads only if valid.
 
-## Deploy A Candidate To Green
+## Deploy A Candidate To The Inactive Slot
 
-Build the current checkout and deploy only the green slot:
+Build the current checkout and automatically deploy only the inactive slot:
 
 ```powershell
-./scripts/deploy-nexus-green.ps1 -Yes
+./scripts/deploy-nexus-slot.ps1 -Slot Auto -BatchUpdateMode Direct -Yes
 ```
 
-This does not change Nginx traffic. It creates:
+The script reads `/etc/nginx/conf.d/new-api-upstream.conf`. If Blue is `down`,
+it deploys Blue; if Green is `down`, it deploys Green. It refuses to run while
+both slots receive traffic or if an explicitly selected slot is active. The
+selection is checked again on the server immediately before container
+replacement to prevent a concurrent traffic change from creating a race.
+
+This does not change Nginx traffic. Depending on the selected slot it creates:
 
 ```text
+/opt/new-api/docker-compose.blue.override.yml
+/opt/new-api/new-api-blue.env
 /opt/new-api/docker-compose.green.override.yml
 /opt/new-api/new-api-green.env
 ```
 
-The green env is copied from the active `new-api` container, with:
+The candidate env is copied from the active slot, with slot-specific values:
 
 ```text
 PORT=3000
-NODE_NAME=nexus-sg-new-api-green
+NODE_NAME=nexus-sg-new-api-blue|green
 BATCH_UPDATE_ENABLED=false
+BATCH_UPDATE_INTERVAL=5
 ```
+
+`Direct` is the release default because it leaves no in-memory quota deltas
+when a candidate is restarted or rolled back. `Batch` must be selected
+explicitly. The legacy `deploy-nexus-green.ps1` command remains as a wrapper,
+but refuses to overwrite Green while Green is active.
 
 ## Canary Traffic
 
@@ -100,7 +114,7 @@ changes must be backward compatible:
 
 ## Background Task Rules
 
-The green slot disables `BATCH_UPDATE_ENABLED` by default. System tasks use the
+Candidate slots disable `BATCH_UPDATE_ENABLED` by default. System tasks use the
 project's DB lease mechanism, but any new background job must be checked for
 multi-instance safety before canary traffic is enabled.
 

@@ -2003,7 +2003,7 @@ UPSTREAM_EVENT_RETENTION_DAYS=30
 灰度发布准备和操作记录在 `docs/nexus-blue-green-canary.md`。相关脚本：
 
 - `scripts/install-nexus-canary-nginx.ps1`：一次性安装 Nginx upstream，初始保持 100% blue。
-- `scripts/deploy-nexus-green.ps1`：部署候选镜像到 green slot，不切流。
+- `scripts/deploy-nexus-slot.ps1`：自动选择 Nginx 中处于 `down` 的 Blue/Green slot 部署候选镜像，不切流。
 - `scripts/set-nexus-canary.ps1`：按权重切流、promote 或 rollback。
 
 ### 19.8 最小回归测试清单
