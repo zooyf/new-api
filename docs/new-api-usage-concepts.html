@@ -1,0 +1,1295 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>new-api 用量链路核心概念关系图</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d7dde8;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --blue: #2368d1;
+      --cyan: #087a8b;
+      --green: #1b7f4b;
+      --amber: #ad6b00;
+      --red: #b42318;
+      --violet: #6941c6;
+      --shadow: 0 18px 50px rgba(22, 32, 51, 0.10);
+      --soft-shadow: 0 8px 24px rgba(22, 32, 51, 0.07);
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #eef4ff 0, #f7f9fc 270px, var(--bg) 100%);
+      color: var(--ink);
+      line-height: 1.65;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+
+    .page {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 64px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      gap: 28px;
+      align-items: stretch;
+      margin-bottom: 28px;
+    }
+
+    .hero-copy { padding: 36px 0 16px; }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 10px;
+      border: 1px solid #c9d8f2;
+      border-radius: 999px;
+      color: #315d9f;
+      background: rgba(255, 255, 255, 0.72);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 18px 0 12px;
+      font-size: clamp(32px, 5vw, 58px);
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 760px;
+      color: #475467;
+      font-size: 18px;
+      margin: 0;
+    }
+
+    .hero-panel,
+    .diagram-panel,
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--soft-shadow);
+    }
+
+    .hero-panel {
+      padding: 22px;
+      min-height: 310px;
+      display: grid;
+      align-content: center;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-panel svg,
+    .diagram-panel svg {
+      width: 100%;
+      min-width: 760px;
+      height: auto;
+      display: block;
+    }
+
+    .nav {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 10px 0 30px;
+    }
+
+    .nav a {
+      display: inline-flex;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: #344054;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 1px 0 rgba(22, 32, 51, 0.03);
+    }
+
+    section { margin-top: 28px; }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      margin: 0 0 14px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 25px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 9px;
+      font-size: 17px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .section-note {
+      color: var(--muted);
+      margin: 0;
+      max-width: 720px;
+      font-size: 14px;
+    }
+
+    .grid { display: grid; gap: 14px; }
+    .concept-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .scenario-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
+
+    .card { padding: 18px; }
+    .card p { margin: 0 0 10px; color: #475467; font-size: 14px; }
+
+    .icon {
+      width: 32px;
+      height: 32px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 800;
+      flex: 0 0 auto;
+      margin-right: 8px;
+    }
+
+    .i-user { background: var(--blue); }
+    .i-key { background: var(--green); }
+    .i-group { background: var(--violet); }
+    .i-channel { background: var(--cyan); }
+    .i-model { background: var(--amber); }
+    .i-type { background: var(--red); }
+
+    .fields {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 12px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #d6dce7;
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: #344054;
+      background: #fbfcff;
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      white-space: nowrap;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      background: #eef2f7;
+      border: 1px solid #dde3ec;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+    }
+
+    .callout {
+      border-left: 4px solid var(--blue);
+      background: #f4f8ff;
+      border-radius: 8px;
+      padding: 14px 16px;
+      color: #344054;
+      font-size: 14px;
+    }
+
+    .callout strong { color: #173b70; }
+
+    .diagram-panel {
+      padding: 18px;
+      overflow: hidden;
+    }
+
+    .scroll-x {
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--soft-shadow);
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #e5e9f1;
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    th {
+      color: #344054;
+      background: #f1f5fb;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .endpoint-map {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(180px, 1fr));
+      gap: 10px;
+      min-width: 1260px;
+    }
+
+    .endpoint-card {
+      border: 1px solid #d7dde8;
+      background: #fbfcff;
+      border-radius: 8px;
+      padding: 13px;
+      min-height: 188px;
+    }
+
+    .endpoint-card b { display: block; color: #172033; font-size: 14px; margin-bottom: 7px; }
+    .endpoint-card span { display: block; color: #5b6472; font-size: 12px; margin: 5px 0; }
+
+    .flow-board {
+      min-width: 1120px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .flow-lane {
+      display: grid;
+      grid-template-columns: 140px 1fr 1fr 1fr 1fr;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .lane-label,
+    .flow-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 13px;
+      background: #fff;
+      box-shadow: 0 1px 0 rgba(22, 32, 51, 0.03);
+    }
+
+    .lane-label {
+      display: grid;
+      place-items: center;
+      text-align: center;
+      background: #172033;
+      color: #fff;
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    .flow-card { position: relative; min-height: 126px; }
+    .flow-card:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      width: 10px;
+      border-top: 2px solid #9aa5b5;
+    }
+
+    .flow-card b { display: block; color: #172033; font-size: 14px; margin-bottom: 7px; }
+    .flow-card span { display: block; color: #5b6472; font-size: 12px; margin: 4px 0; }
+    .flow-card.sync { background: #f8fbff; border-color: #c9d8f2; }
+    .flow-card.task { background: #f4fbf7; border-color: #b9dfc7; }
+    .flow-card.warn { background: #fffaf0; border-color: #e6c37a; }
+    .flow-card.dark { background: #172033; color: #fff; border-color: #172033; }
+    .flow-card.dark b, .flow-card.dark span { color: #fff; }
+
+    .mini-list {
+      margin: 9px 0 0;
+      padding-left: 18px;
+      color: #475467;
+      font-size: 14px;
+    }
+
+    .mini-list li { margin: 5px 0; }
+
+    .equation {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+      padding: 13px;
+      border: 1px dashed #c8d2e2;
+      border-radius: 8px;
+      background: #fbfcff;
+    }
+
+    .footer {
+      margin-top: 36px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .split { grid-template-columns: 1fr; }
+      .concept-grid,
+      .scenario-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 640px) {
+      .page { width: min(100% - 24px, 1180px); padding-top: 20px; }
+      .concept-grid,
+      .scenario-grid { grid-template-columns: 1fr; }
+      h1 { font-size: 34px; }
+      .section-head { display: block; }
+      .section-note { margin-top: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">new-api usage graph</span>
+        <h1>用量链路里的 User、Group、Channel、Model、Type 与 API Key</h1>
+        <p class="lead">
+          这几个概念不是平级字段，而是一次 API 调用从“谁在调用”到“走哪个 endpoint、哪个 helper、哪个上游渠道”再到“如何计费、如何落用量明细”的完整坐标系。
+        </p>
+      </div>
+      <div class="hero-panel" aria-label="核心关系缩略图">
+        <svg viewBox="0 0 560 330" role="img">
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="#667085"></path>
+            </marker>
+            <style>
+              .node { fill: #fff; stroke: #d7dde8; stroke-width: 2; }
+              .label { font: 700 16px 'Segoe UI', sans-serif; fill: #172033; }
+              .sub { font: 12px 'Segoe UI', sans-serif; fill: #667085; }
+              .edge { stroke: #667085; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+            </style>
+          </defs>
+          <rect x="22" y="26" width="118" height="62" rx="8" class="node"></rect>
+          <text x="42" y="54" class="label">User</text>
+          <text x="42" y="73" class="sub">账户 / 额度</text>
+          <rect x="205" y="26" width="130" height="62" rx="8" class="node"></rect>
+          <text x="226" y="54" class="label">API Key</text>
+          <text x="226" y="73" class="sub">Token / 入口</text>
+          <rect x="394" y="26" width="128" height="62" rx="8" class="node"></rect>
+          <text x="416" y="54" class="label">Group</text>
+          <text x="416" y="73" class="sub">路由 / 倍率</text>
+          <rect x="394" y="134" width="128" height="62" rx="8" class="node"></rect>
+          <text x="416" y="162" class="label">Model</text>
+          <text x="416" y="181" class="sub">请求模型名</text>
+          <rect x="205" y="134" width="130" height="62" rx="8" class="node"></rect>
+          <text x="224" y="162" class="label">Channel</text>
+          <text x="224" y="181" class="sub">上游供应商</text>
+          <rect x="22" y="134" width="118" height="62" rx="8" class="node"></rect>
+          <text x="44" y="162" class="label">Type</text>
+          <text x="44" y="181" class="sub">协议适配</text>
+          <rect x="122" y="250" width="320" height="54" rx="8" fill="#172033"></rect>
+          <text x="154" y="278" font-family="Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#fff">Usage Log = 一次调用的最终记录</text>
+          <text x="154" y="296" font-family="Segoe UI, sans-serif" font-size="12" fill="#cbd5e1">user + token + group + model + channel + quota</text>
+          <path d="M140 57 H205" class="edge"></path>
+          <path d="M335 57 H394" class="edge"></path>
+          <path d="M458 88 V134" class="edge"></path>
+          <path d="M394 165 H335" class="edge"></path>
+          <path d="M205 165 H140" class="edge"></path>
+          <path d="M80 196 C80 238 145 253 190 253" class="edge"></path>
+          <path d="M270 196 V250" class="edge"></path>
+          <path d="M458 196 C458 232 414 250 374 250" class="edge"></path>
+        </svg>
+      </div>
+    </header>
+
+    <nav class="nav" aria-label="页面导航">
+      <a href="#concepts">核心概念</a>
+      <a href="#relationship">关系总览</a>
+      <a href="#channel-type">Channel Type</a>
+      <a href="#endpoint-shapes">Endpoint 形态</a>
+      <a href="#detailed-flow">详细判定流程图</a>
+      <a href="#path-relaymode">Path2RelayMode</a>
+      <a href="#group-logic">Group 规则</a>
+      <a href="#production-examples">生产例子</a>
+    </nav>
+
+    <section id="concepts">
+      <div class="section-head">
+        <h2>核心概念</h2>
+        <p class="section-note">字段名按 new-api 代码和数据库模型口径描述；其中 API Key 在代码里主要叫 Token。</p>
+      </div>
+
+      <div class="grid concept-grid">
+        <article class="card">
+          <h3><span class="icon i-user">U</span>User 用户</h3>
+          <p>平台账号实体，代表谁拥有额度、谁创建 API Key、谁在后台看到消费。用户只有一个默认分组。</p>
+          <div class="fields">
+            <span class="pill">users.id</span>
+            <span class="pill">username</span>
+            <span class="pill">group</span>
+            <span class="pill">quota</span>
+            <span class="pill">used_quota</span>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3><span class="icon i-key">K</span>API Key / Token</h3>
+          <p>客户请求时携带的凭证。它属于某个 User，可以指定本 key 使用的目标 group，也可以限制模型、IP、过期时间和额度。</p>
+          <div class="fields">
+            <span class="pill">tokens.id</span>
+            <span class="pill">user_id</span>
+            <span class="pill">key</span>
+            <span class="pill">name</span>
+            <span class="pill">group</span>
+            <span class="pill">model_limits</span>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3><span class="icon i-group">G</span>Group 分组</h3>
+          <p>单次请求最终只会落到一个 effective group。这个 group 同时参与渠道候选、客户倍率、模型权限和日志归属。</p>
+          <div class="fields">
+            <span class="pill">users.group</span>
+            <span class="pill">tokens.group</span>
+            <span class="pill">channels.group</span>
+            <span class="pill">group_ratio</span>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3><span class="icon i-channel">C</span>Channel 渠道</h3>
+          <p>上游供应商配置。渠道通过 group 声明服务范围，通过 models 声明能承接哪些模型，通过 type 声明用哪个适配器。</p>
+          <div class="fields">
+            <span class="pill">channels.id</span>
+            <span class="pill">name</span>
+            <span class="pill">type</span>
+            <span class="pill">base_url</span>
+            <span class="pill">models</span>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3><span class="icon i-model">M</span>Model 模型</h3>
+          <p>下游请求里的模型名。它先参与 key 模型限制和渠道候选，再可能通过模型映射转换成上游模型名。</p>
+          <div class="fields">
+            <span class="pill">request.model</span>
+            <span class="pill">model_mapping</span>
+            <span class="pill">origin_model</span>
+            <span class="pill">upstream_model</span>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3><span class="icon i-type">T</span>channels.type</h3>
+          <p>它不是 usage log 里的 type，而是渠道的协议/供应商适配器类型。选中 channel 之后，type 决定用哪个 adaptor 发上游。</p>
+          <div class="fields">
+            <span class="pill">type=54 DoubaoVideo</span>
+            <span class="pill">type=58 AdvancedCustom</span>
+            <span class="pill">普通 adaptor</span>
+            <span class="pill">task adaptor</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="relationship">
+      <div class="section-head">
+        <h2>关系总览</h2>
+        <p class="section-note">恢复了原来的核心关系图，并把线条拉开：User 拥有 Token；Token 解析出 effective group；group + model 选 Channel；Channel 发上游并落用量明细。</p>
+      </div>
+
+      <div class="diagram-panel scroll-x">
+        <svg viewBox="0 0 1080 460" role="img" aria-label="User API Key Group Model Channel Usage 关系图">
+          <defs>
+            <marker id="arrow2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+              <path d="M0,0 L9,4.5 L0,9 Z" fill="#596273"></path>
+            </marker>
+            <style>
+              .box { fill: #fff; stroke: #d7dde8; stroke-width: 2; }
+              .title { font: 800 15px 'Segoe UI', sans-serif; fill: #172033; }
+              .text { font: 12px 'Segoe UI', sans-serif; fill: #596273; }
+              .small { font: 11px 'Segoe UI', sans-serif; fill: #667085; }
+              .edge2 { stroke: #596273; stroke-width: 2; fill: none; marker-end: url(#arrow2); }
+              .dash { stroke-dasharray: 6 6; }
+              .blue { fill: #2368d1; }
+              .green { fill: #1b7f4b; }
+              .violet { fill: #6941c6; }
+              .cyan { fill: #087a8b; }
+              .amber { fill: #ad6b00; }
+              .red { fill: #b42318; }
+            </style>
+          </defs>
+
+          <rect x="42" y="48" width="178" height="96" rx="8" class="box"></rect>
+          <circle cx="72" cy="78" r="16" class="blue"></circle>
+          <text x="98" y="83" class="title">User</text>
+          <text x="66" y="112" class="text">默认 group / quota</text>
+          <text x="66" y="132" class="small">账户、权限、余额归属</text>
+
+          <rect x="302" y="48" width="190" height="96" rx="8" class="box"></rect>
+          <circle cx="332" cy="78" r="16" class="green"></circle>
+          <text x="358" y="83" class="title">API Key / Token</text>
+          <text x="326" y="112" class="text">属于 User，可指定 group</text>
+          <text x="326" y="132" class="small">认证、限模、限 IP、过期</text>
+
+          <rect x="584" y="48" width="178" height="96" rx="8" class="box"></rect>
+          <circle cx="614" cy="78" r="16" class="violet"></circle>
+          <text x="640" y="83" class="title">Effective Group</text>
+          <text x="608" y="112" class="text">token.group 优先</text>
+          <text x="608" y="132" class="small">路由分组 + 客户倍率</text>
+
+          <rect x="820" y="48" width="178" height="96" rx="8" class="box"></rect>
+          <circle cx="850" cy="78" r="16" class="amber"></circle>
+          <text x="876" y="83" class="title">Model</text>
+          <text x="844" y="112" class="text">请求中的 model</text>
+          <text x="844" y="132" class="small">限模、路由、定价</text>
+
+          <rect x="584" y="238" width="178" height="102" rx="8" class="box"></rect>
+          <circle cx="614" cy="268" r="16" class="cyan"></circle>
+          <text x="640" y="273" class="title">Channel</text>
+          <text x="608" y="302" class="text">group + models 命中</text>
+          <text x="608" y="322" class="small">type 决定 provider adaptor</text>
+
+          <rect x="820" y="238" width="178" height="102" rx="8" class="box"></rect>
+          <circle cx="850" cy="268" r="16" class="red"></circle>
+          <text x="876" y="273" class="title">Usage Log</text>
+          <text x="844" y="302" class="text">consume / refund / error</text>
+          <text x="844" y="322" class="small">记录 quota、tokens、channel</text>
+
+          <rect x="42" y="238" width="178" height="102" rx="8" class="box"></rect>
+          <text x="66" y="273" class="title">Pricing Context</text>
+          <text x="66" y="302" class="text">model ratio / price</text>
+          <text x="66" y="322" class="small">group ratio / quota unit</text>
+
+          <rect x="302" y="238" width="190" height="102" rx="8" class="box"></rect>
+          <text x="326" y="273" class="title">Upstream Request</text>
+          <text x="326" y="302" class="text">base_url + key + path</text>
+          <text x="326" y="322" class="small">model_mapping 后发给供应商</text>
+
+          <path d="M220 96 H302" class="edge2"></path>
+          <text x="236" y="84" class="small">1:N 拥有</text>
+          <path d="M492 96 H584" class="edge2"></path>
+          <text x="512" y="84" class="small">解析分组</text>
+          <path d="M762 96 H820" class="edge2"></path>
+          <text x="770" y="84" class="small">一起筛选</text>
+          <path d="M673 144 V238" class="edge2"></path>
+          <text x="690" y="196" class="small">group 命中</text>
+          <path d="M909 144 V238" class="edge2"></path>
+          <text x="924" y="196" class="small">model 命中</text>
+          <path d="M762 289 H820" class="edge2"></path>
+          <text x="773" y="276" class="small">写入渠道</text>
+          <path d="M584 289 H492" class="edge2"></path>
+          <text x="510" y="276" class="small">发起上游</text>
+          <path d="M302 289 H220" class="edge2 dash"></path>
+          <text x="236" y="276" class="small">消耗用量</text>
+          <path d="M220 326 C420 430 742 430 892 340" class="edge2 dash"></path>
+          <text x="488" y="430" class="small">计算 quota 后落消费 / 退款 / 错误明细</text>
+        </svg>
+      </div>
+
+    </section>
+
+    <section id="channel-type">
+      <div class="section-head">
+        <h2>Channel Type 与 Endpoint 的关系</h2>
+        <p class="section-note">客户访问的 endpoint 先决定“这是什么调用形态”，选中渠道后，<code>channels.type</code> 再决定“如何把这个调用发给上游”。</p>
+      </div>
+
+      <div class="diagram-panel scroll-x">
+        <svg viewBox="0 0 1080 330" role="img" aria-label="Endpoint RelayMode ChannelType Adapter 关系图">
+          <defs>
+            <marker id="arrow4" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+              <path d="M0,0 L9,4.5 L0,9 Z" fill="#596273"></path>
+            </marker>
+            <style>
+              .ebox { fill: #fff; stroke: #d7dde8; stroke-width: 2; }
+              .etitle { font: 800 15px 'Segoe UI', sans-serif; fill: #172033; }
+              .etext { font: 12px 'Segoe UI', sans-serif; fill: #596273; }
+              .eedge { stroke: #596273; stroke-width: 2; fill: none; marker-end: url(#arrow4); }
+            </style>
+          </defs>
+
+          <rect x="34" y="70" width="190" height="112" rx="8" class="ebox"></rect>
+          <text x="58" y="104" class="etitle">Downstream Endpoint</text>
+          <text x="58" y="130" class="etext">客户访问的路径</text>
+          <text x="58" y="150" class="etext">/v1/chat/completions</text>
+          <text x="58" y="170" class="etext">/v1/video/generations</text>
+
+          <rect x="284" y="70" width="178" height="112" rx="8" class="ebox"></rect>
+          <text x="308" y="104" class="etitle">RelayMode</text>
+          <text x="308" y="130" class="etext">由 path 或中间件确定</text>
+          <text x="308" y="150" class="etext">chat / image / audio</text>
+          <text x="308" y="170" class="etext">video submit / fetch</text>
+
+          <rect x="522" y="70" width="178" height="112" rx="8" class="ebox"></rect>
+          <text x="546" y="104" class="etitle">Channel Select</text>
+          <text x="546" y="130" class="etext">group + model 命中</text>
+          <text x="546" y="150" class="etext">priority / weight</text>
+          <text x="546" y="170" class="etext">AdvancedCustom 额外看 path</text>
+
+          <rect x="760" y="70" width="178" height="112" rx="8" class="ebox"></rect>
+          <text x="784" y="104" class="etitle">channels.type</text>
+          <text x="784" y="130" class="etext">供应商 / 协议类型</text>
+          <text x="784" y="150" class="etext">OpenAI / Claude</text>
+          <text x="784" y="170" class="etext">DoubaoVideo / Sora</text>
+
+          <rect x="392" y="236" width="294" height="58" rx="8" fill="#172033"></rect>
+          <text x="420" y="263" font-family="Segoe UI, sans-serif" font-size="15" font-weight="800" fill="#fff">Final Upstream Request</text>
+          <text x="420" y="283" font-family="Segoe UI, sans-serif" font-size="12" fill="#cbd5e1">base_url + upstream path + auth + converted body</text>
+
+          <path d="M224 126 H284" class="eedge"></path>
+          <path d="M462 126 H522" class="eedge"></path>
+          <path d="M700 126 H760" class="eedge"></path>
+          <path d="M849 182 C818 226 732 254 686 262" class="eedge"></path>
+          <path d="M373 182 C406 224 450 238 490 236" class="eedge"></path>
+        </svg>
+      </div>
+
+      <div class="callout" style="margin-top: 14px;">
+        <strong>判断顺序：</strong>先看客户打到哪个 endpoint，再看请求 body 或 path 里的 model，随后用 group + model 选 channel，最后才由 <code>channels.type</code> 决定“这个 channel 如何访问上游”。所以 type 与 endpoint 是协作关系，不是一对一绑定关系。
+      </div>
+
+      <div class="scroll-x" style="margin-top: 14px;">
+        <table>
+          <thead>
+            <tr>
+              <th>客户 endpoint</th>
+              <th>先得到的调用形态</th>
+              <th>channels.type 的作用</th>
+              <th>例子</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>POST /v1/chat/completions</code></td>
+              <td>ChatCompletions 文本/多模态同步调用。</td>
+              <td>决定转成 OpenAI、Claude、Gemini、通义、火山等哪家上游协议。</td>
+              <td>Claude 渠道会把 OpenAI 兼容请求转成 Anthropic Messages；Gemini 渠道会转成 Gemini 格式。</td>
+            </tr>
+            <tr>
+              <td><code>POST /v1/images/generations</code></td>
+              <td>图片生成调用。</td>
+              <td>决定上游图片接口路径和图片参数转换方式。</td>
+              <td>OpenAI、阿里、火山等图片接口字段和 URL 可能完全不同。</td>
+            </tr>
+            <tr>
+              <td><code>POST /v1/video/generations</code></td>
+              <td>异步视频任务提交。</td>
+              <td>通过 task adaptor 决定是 DoubaoVideo、Sora、Kling、Vidu 等任务协议。</td>
+              <td>Seedance 渠道应选 <code>DoubaoVideo</code> 这类支持豆包视频任务语义的 type。</td>
+            </tr>
+            <tr>
+              <td><code>GET /v1/video/generations/{task_id}</code></td>
+              <td>异步视频任务查询。</td>
+              <td>根据 task/platform/channel type 找对应查询 adaptor，并在成功后触发重算或退款。</td>
+              <td>提交和查询必须能回到同一类 task adaptor，否则状态和 usage 解析可能不对。</td>
+            </tr>
+            <tr>
+              <td>自定义 path</td>
+              <td>取决于路由是否已注册，或是否由独立代理接住。</td>
+              <td><code>Advanced Custom</code> 可以配置 incoming/upstream path；素材库透传则走独立服务。</td>
+              <td><code>/api/v3/open/CreateAsset</code> 由 Nginx 转发到 <code>hwdrama-proxy</code>，不进主 relay helper。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="detailed-flow">
+      <div class="section-head">
+        <h2>详细判定流程图</h2>
+        <p class="section-note">这张图只表达执行顺序：从 HTTP 请求进入，到 Router、中间件、请求语义解析、选渠道，再分流到普通 helper 或 task adaptor。详细解释放在图后面，按 0 到 7 顺序展开。</p>
+      </div>
+
+      <div class="callout" style="margin-bottom: 14px;">
+        <strong>先把业务流程排直：</strong>这条链路不是并行图，也不是 Router 反向指向 HTTP。正确顺序是：HTTP 请求先进入 Gin Router，Router 命中具体 endpoint 后才执行该路由上的中间件；<code>TokenAuth</code> 负责识别用户和 key，<code>Distribute</code> 先从 body/path/query/route param 解析 model、group、relay_mode，再用 group + model 选 channel，最后 controller/helper/task adaptor 只使用已经选好的 channel 去访问上游。
+      </div>
+
+      <div class="diagram-panel scroll-x">
+        <svg viewBox="0 0 1180 880" role="img" aria-label="从 HTTP 入口到 helper 或 task adaptor 的顺序流程图">
+          <defs>
+            <marker id="arrow7" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+              <path d="M0,0 L9,4.5 L0,9 Z" fill="#596273"></path>
+            </marker>
+            <style>
+              .fbox { fill: #fff; stroke: #d7dde8; stroke-width: 2; }
+              .fdecision { fill: #fffaf0; stroke: #e0b15d; stroke-width: 2; }
+              .fok { fill: #eefbf4; stroke: #7ac79b; stroke-width: 2; }
+              .fstop { fill: #fff1f0; stroke: #ee8b83; stroke-width: 2; }
+              .froute { fill: #eef4ff; stroke: #9bb9ed; stroke-width: 2; }
+              .ftask { fill: #eefbf4; stroke: #7ac79b; stroke-width: 2; }
+              .ftitle { font: 800 14px 'Segoe UI', sans-serif; fill: #172033; }
+              .ftext { font: 12px 'Segoe UI', sans-serif; fill: #596273; }
+              .fsmall { font: 11px 'Segoe UI', sans-serif; fill: #667085; }
+              .fedge { stroke: #596273; stroke-width: 2; fill: none; marker-end: url(#arrow7); }
+              .fdash { stroke-dasharray: 6 6; }
+            </style>
+          </defs>
+
+          <rect x="390" y="20" width="400" height="64" rx="8" class="fbox"></rect>
+          <text x="420" y="48" class="ftitle">0. HTTP Request</text>
+          <text x="420" y="68" class="ftext">输出：method + path + query + headers + body</text>
+
+          <rect x="390" y="105" width="400" height="64" rx="8" class="froute"></rect>
+          <text x="420" y="133" class="ftitle">1. Router 匹配 endpoint</text>
+          <text x="420" y="153" class="ftext">输出：handler / relayFormat / route params / middleware chain</text>
+
+          <rect x="390" y="190" width="400" height="64" rx="8" class="fbox"></rect>
+          <text x="420" y="218" class="ftitle">2. TokenAuth</text>
+          <text x="420" y="238" class="ftext">输出：AuthContext(user / token / group / quota / limits)</text>
+
+          <rect x="390" y="275" width="400" height="90" rx="8" class="fok"></rect>
+          <text x="420" y="305" class="ftitle">3. Distribute 解析请求语义</text>
+          <text x="420" y="328" class="ftext">从第 0 步 body/path/query 和第 1 步 route params 解析</text>
+          <text x="420" y="349" class="ftext">输出：modelRequest / relay_mode / platform / shouldSelectChannel</text>
+
+          <rect x="390" y="400" width="400" height="90" rx="8" class="fok"></rect>
+          <text x="420" y="430" class="ftitle">4. Distribute 选择 channel</text>
+          <text x="420" y="453" class="ftext">使用第 2 步 AuthContext + 第 3 步 model/group</text>
+          <text x="420" y="474" class="ftext">输出：ChannelContext(channel_id / type / base_url / key)</text>
+
+          <polygon points="590,520 735,576 590,632 445,576" class="fdecision"></polygon>
+          <text x="528" y="572" class="ftitle">5. Controller 分支</text>
+          <text x="520" y="594" class="fsmall">普通同步 relay 还是异步任务 relay</text>
+
+          <rect x="72" y="676" width="430" height="104" rx="8" class="froute"></rect>
+          <text x="102" y="708" class="ftitle">6A. 普通同步 relay</text>
+          <text x="102" y="733" class="ftext">controller.Relay → GenRelayInfo → Path2RelayMode</text>
+          <text x="102" y="754" class="ftext">relayHandler 选择 Text/Image/Audio/Responses Helper</text>
+          <text x="102" y="774" class="fsmall">输出：helper + 普通 adaptor + RelayInfo</text>
+
+          <rect x="678" y="676" width="430" height="104" rx="8" class="ftask"></rect>
+          <text x="708" y="708" class="ftitle">6B. 异步任务 relay</text>
+          <text x="708" y="733" class="ftext">controller.RelayTask / RelayTaskFetch</text>
+          <text x="708" y="754" class="ftext">使用 relay_mode / platform / channels.type 找 task adaptor</text>
+          <text x="708" y="774" class="fsmall">输出：task adaptor + action + task billing context</text>
+
+          <rect x="330" y="824" width="520" height="38" rx="8" fill="#172033"></rect>
+          <text x="375" y="848" font-family="Segoe UI, sans-serif" font-size="13" font-weight="800" fill="#fff">7. adaptor 发上游，解析响应 / usage / task，写计费与日志</text>
+
+          <path d="M590 84 V105" class="fedge"></path>
+          <path d="M590 169 V190" class="fedge"></path>
+          <path d="M590 254 V275" class="fedge"></path>
+          <path d="M590 365 V400" class="fedge"></path>
+          <path d="M590 490 V520" class="fedge"></path>
+          <path d="M445 576 C330 606 287 636 287 676" class="fedge"></path>
+          <path d="M735 576 C850 606 893 636 893 676" class="fedge"></path>
+          <path d="M287 780 C310 812 350 843 330 843" class="fedge"></path>
+          <path d="M893 780 C870 812 850 843 850 843" class="fedge"></path>
+          <text x="314" y="628" class="fsmall">普通同步</text>
+          <text x="818" y="628" class="fsmall">异步任务</text>
+        </svg>
+      </div>
+
+      <div class="section-head" style="margin-top: 18px;">
+        <h2 id="endpoint-shapes">0. HTTP 入口：endpoint 形态</h2>
+        <p class="section-note">先解释图里的第 0 步。endpoint 形态按代码入口定义，不按供应商名字定义；当前文档把生产关心的入口收敛成 7 类。</p>
+      </div>
+
+      <div class="scroll-x" style="margin-bottom: 14px;">
+        <div class="endpoint-map">
+          <div class="endpoint-card">
+            <b>0-A. 模型列表/模型查询</b>
+            <span><code>GET /v1/models</code></span>
+            <span><code>GET /v1/models/{model}</code></span>
+            <span><code>GET /v1beta/models</code></span>
+            <span>返回模型，不进入普通 relay helper。</span>
+          </div>
+          <div class="endpoint-card">
+            <b>0-B. OpenAI 兼容同步调用</b>
+            <span><code>/v1/chat/completions</code></span>
+            <span><code>/v1/responses</code> / <code>/v1/embeddings</code></span>
+            <span><code>/v1/images/*</code> / <code>/v1/audio/*</code></span>
+            <span>进入 <code>controller.Relay</code>，主要靠 <code>Path2RelayMode</code> 推断 RelayMode。</span>
+          </div>
+          <div class="endpoint-card">
+            <b>0-C. Playground 调用</b>
+            <span><code>POST /pg/chat/completions</code></span>
+            <span>走用户会话鉴权，不走 API Key；随后仍按 chat relay 处理。</span>
+          </div>
+          <div class="endpoint-card">
+            <b>0-D. Gemini 原生路径</b>
+            <span><code>/v1beta/models/*</code></span>
+            <span><code>/v1/models/*</code></span>
+            <span><code>/v1/engines/:model/embeddings</code></span>
+            <span>从 path 提取模型，设置 <code>RelayModeGemini</code>。</span>
+          </div>
+          <div class="endpoint-card">
+            <b>0-E. 视频异步任务</b>
+            <span><code>POST /v1/video/generations</code></span>
+            <span><code>GET /v1/video/generations/{id}</code></span>
+            <span><code>/v1/videos</code> / <code>/v1/videos/{id}</code></span>
+            <span>Distributor 设置 <code>RelayModeVideoSubmit/Fetch</code>。</span>
+          </div>
+          <div class="endpoint-card">
+            <b>0-F. 供应商兼容任务入口</b>
+            <span><code>/mj/*</code> / <code>/suno/*</code></span>
+            <span><code>/kling/v1/videos/*</code></span>
+            <span><code>/jimeng</code></span>
+            <span>中间件把供应商格式转成内部任务语义，或设置 platform / relay_mode。</span>
+          </div>
+          <div class="endpoint-card">
+            <b>0-G. 非主 relay 的独立代理</b>
+            <span><code>/api/v3/ark/*</code></span>
+            <span><code>/api/v3/open/*</code></span>
+            <span>例如素材库透传服务，经 Nginx 转到 <code>hwdrama-proxy</code>，不进入主 relay helper。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-top: 18px;">
+        <h2>阶段说明</h2>
+        <p class="section-note">下面继续按图中编号说明 0 到 7。每一行的关键输入都来自前面阶段的关键输出；第 0 步是链路起点，因此没有上一阶段。</p>
+      </div>
+
+      <div class="scroll-x">
+        <table>
+          <thead>
+            <tr>
+              <th>阶段</th>
+              <th>关键输入</th>
+              <th>做什么</th>
+              <th>关键输出</th>
+              <th>下一步</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0. HTTP Request</td>
+              <td>链路起点：客户发来的 HTTP 请求，没有上一阶段输入。</td>
+              <td>接收原始请求；全局中间件会先处理 CORS、解压、请求体存储、统计等通用行为。</td>
+              <td><code>method</code>、<code>path</code>、<code>query</code>、<code>headers</code>、<code>body</code>、<code>content_type</code>。</td>
+              <td>交给 Gin Router 用 <code>method + path</code> 匹配具体路由。代码入口见 <code>router/relay-router.go</code>、<code>router/video-router.go</code>。</td>
+            </tr>
+            <tr>
+              <td>1. Router 匹配 endpoint</td>
+              <td>来自第 0 步输出的 <code>method</code>、<code>path</code>。</td>
+              <td>Router 按注册表决定请求属于哪类入口：普通 OpenAI 兼容 relay、视频任务 relay、Gemini 原生路径、MJ/Suno/Kling/Jimeng 任务路径，或者非主 relay 的独立代理。</td>
+              <td>命中的 <code>handler</code>，例如 <code>controller.Relay</code>、<code>RelayTask</code>、<code>RelayTaskFetch</code>；命中的 <code>relayFormat</code>；路由参数如 <code>:model</code>、<code>:task_id</code>、<code>:action</code>；以及该路由挂载的中间件链。</td>
+              <td>执行该路由上的鉴权中间件。普通 API key 路由进入 <code>TokenAuth</code>；Playground 进入 <code>UserAuth</code> 后再进入 <code>Distribute</code>。</td>
+            </tr>
+            <tr>
+              <td>2. TokenAuth</td>
+              <td>来自第 0 步输出的 <code>headers</code>、<code>query</code>、<code>path</code>，以及第 1 步输出的中间件链。</td>
+              <td>识别 API Key，校验 token 状态、过期、额度、IP、模型限制等，并把用户和 token 上下文写入 Gin context。</td>
+              <td><code>AuthContext</code>：<code>user_id</code>、<code>user.group</code>、<code>using_group</code>、<code>token_id</code>、<code>token.group</code>、token quota、模型限制、跨分组重试标记、可选 <code>specific_channel_id</code>。</td>
+              <td>进入 <code>Distribute</code>。相关代码见 <code>middleware/auth.go</code> 的 <code>TokenAuth</code> 和 <code>SetupContextForToken</code>。</td>
+            </tr>
+            <tr>
+              <td>3. Distribute 解析请求语义</td>
+              <td>来自第 0 步输出的 <code>path</code>、<code>query</code>、<code>body</code>、<code>content_type</code>；来自第 1 步输出的路由参数；来自第 2 步输出的 <code>AuthContext.user_id</code> 和模型限制上下文。</td>
+              <td><code>getModelRequest</code> 根据路径和 Content-Type 解析模型。JSON 请求用 <code>gjson</code> 读取 <code>model</code>/<code>group</code>；Gemini 原生路径从 path 提取模型；视频提交从 body 读取模型；视频查询在需要模型限制校验时从已存任务回填原始模型；图片、音频、moderation 会按代码补默认模型或 <code>relay_mode</code>。</td>
+              <td><code>RequestSemantic</code>：<code>modelRequest.Model</code>、<code>modelRequest.Group</code>、<code>shouldSelectChannel</code>、<code>relay_mode</code>、<code>platform</code>、任务查询时回填的原始模型。</td>
+              <td>进入同一个 <code>Distribute</code> 中的渠道选择逻辑。相关代码见 <code>middleware/distributor.go</code> 的 <code>getModelRequest</code>、<code>getModelFromRequest</code>、<code>getModelFromJSONBody</code>。</td>
+            </tr>
+            <tr>
+              <td>4. Distribute 选择 channel</td>
+              <td>来自第 2 步输出的 <code>AuthContext</code>，来自第 3 步输出的 <code>RequestSemantic.model/group/shouldSelectChannel</code>，以及第 0 步输出的 <code>path</code>。</td>
+              <td>先做 token 模型限制校验；再确定实际使用分组；如果 token 指定了渠道则校验该渠道，否则使用 affinity 或 <code>CacheGetRandomSatisfiedChannel</code> 根据 <code>group + model + requestPath</code> 找可用渠道；最后调用 <code>SetupContextForSelectedChannel</code> 写入渠道上下文。</td>
+              <td><code>ChannelContext</code>：<code>original_model</code>、<code>channel_id</code>、<code>channel_name</code>、<code>channels.type</code>、<code>channel.base_url</code>、上游 key、模型映射、参数覆盖、请求头覆盖、状态码映射、<code>request_start_time</code>。</td>
+              <td>进入第 1 步已经命中的 controller。相关代码见 <code>middleware/distributor.go</code> 的 <code>Distribute</code> 和 <code>SetupContextForSelectedChannel</code>。</td>
+            </tr>
+            <tr>
+              <td>5. Controller 分支</td>
+              <td>来自第 1 步输出的 <code>handler/relayFormat</code>，来自第 3 步输出的 <code>relay_mode/platform</code>，来自第 4 步输出的 <code>ChannelContext</code>。</td>
+              <td>根据路由 handler 进入普通同步 controller 或异步任务 controller：普通 OpenAI/Claude/Gemini/Image/Audio 路径进入 <code>controller.Relay</code>；视频、Suno、Kling、Jimeng 等任务路径进入 <code>RelayTask</code> 或 <code>RelayTaskFetch</code>。</td>
+              <td>分叉方向：<code>6A</code> 普通同步 relay，或 <code>6B</code> 异步任务 relay。</td>
+              <td>普通同步继续构建 <code>RelayInfo</code> 并用 <code>Path2RelayMode</code> 选择 helper；异步任务继续构建 task relay 运行时并选择 task adaptor。</td>
+            </tr>
+            <tr>
+              <td>6A. 普通同步 relay</td>
+              <td>来自第 5 步输出的普通同步分支，来自第 4 步输出的 <code>ChannelContext</code>，来自第 0 步输出的 <code>body/path/headers</code>，以及第 3 步输出的 <code>relay_mode</code> 兜底值。</td>
+              <td><code>controller.Relay</code> 校验并解析请求 DTO，<code>GenRelayInfo</code> 从 context 组装 <code>RelayInfo</code>；<code>genBaseRelayInfo</code> 先用 <code>Path2RelayMode(path)</code> 推断 RelayMode，未知时回退到第 3 步设置的 <code>relay_mode</code>；随后计费预扣、重试选渠道，<code>relayHandler</code> 根据 RelayMode 选择 Text/Image/Audio/Responses 等 helper。</td>
+              <td><code>SyncRelayRuntime</code>：校验后的请求 DTO、<code>RelayInfo</code>、<code>PriceData</code>/预扣费会话、选中的 helper、由 <code>channels.type</code> 初始化的普通 adaptor。</td>
+              <td>进入第 7 步，由普通 adaptor 组装上游请求、调用上游、解析响应和 usage。相关代码见 <code>controller/relay.go</code>、<code>relay/common/relay_info.go</code>、<code>relay/constant/relay_mode.go</code>。</td>
+            </tr>
+            <tr>
+              <td>6B. 异步任务 relay</td>
+              <td>来自第 5 步输出的异步任务分支，来自第 4 步输出的 <code>ChannelContext</code>，来自第 0 步输出的 <code>body/path</code>，以及第 3 步输出的 <code>relay_mode/platform/model</code>。</td>
+              <td><code>controller.RelayTask</code> 或 <code>RelayTaskFetch</code> 构建 task <code>RelayInfo</code>；提交路径会先 <code>ResolveOriginTask</code>，再进入 <code>RelayTaskSubmit</code>；<code>RelayTaskSubmit</code> 用 <code>platform</code> 或 <code>GetTaskPlatform</code> 找 task adaptor，调用 <code>ValidateRequestAndSetAction</code>，再应用模型映射和任务计费逻辑。</td>
+              <td><code>TaskRelayRuntime</code>：选中的 task adaptor、任务 <code>action</code>、<code>OriginModelName</code>/<code>UpstreamModelName</code>、预扣费上下文、公开任务 ID、上游任务请求或查询响应构造器。</td>
+              <td>进入第 7 步，由 task adaptor 提交上游任务或查询任务状态。相关代码见 <code>controller/relay.go</code>、<code>relay/relay_task.go</code>、<code>relay/channel/task/*</code>。</td>
+            </tr>
+            <tr>
+              <td>7. adaptor 发上游，解析响应 / usage</td>
+              <td>来自第 6A 输出的 <code>SyncRelayRuntime</code> 或第 6B 输出的 <code>TaskRelayRuntime</code>，以及来自第 4 步输出的 <code>ChannelContext</code>。</td>
+              <td>adaptor 组装上游 URL、headers、body，发送请求，解析响应。同步接口解析 usage 后结算；异步任务提交时预扣并记录任务，完成或失败后按任务终态重算、退款或写任务日志。</td>
+              <td>客户响应、上游响应、<code>usage</code>、任务状态、quota 消费/退款日志。</td>
+              <td>返回客户；同时写 usage log、task 或 billing 相关记录。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="path-relaymode">
+      <div class="section-head">
+        <h2>Path 推断 RelayMode 的实现逻辑</h2>
+        <p class="section-note">实现位于 <code>relay/constant/relay_mode.go</code>。普通同步接口先由 <code>Path2RelayMode(path)</code> 归类；视频等任务入口主要由 Distributor 或转换中间件设置 <code>relay_mode</code>。</p>
+      </div>
+
+      <div class="scroll-x">
+        <table>
+          <thead>
+            <tr>
+              <th>Path2RelayMode 规则</th>
+              <th>RelayMode</th>
+              <th>后续 helper / handler</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>/v1/chat/completions</code> 或 <code>/pg/chat/completions</code></td>
+              <td><code>RelayModeChatCompletions</code></td>
+              <td><code>TextHelper</code></td>
+              <td>普通文本/多模态聊天主链路。</td>
+            </tr>
+            <tr>
+              <td><code>/v1/completions</code>、<code>/v1/edits</code>、<code>/v1/moderations</code></td>
+              <td><code>Completions</code> / <code>Edits</code> / <code>Moderations</code></td>
+              <td>默认 <code>TextHelper</code></td>
+              <td>没有专门 case 时落到文本 helper。</td>
+            </tr>
+            <tr>
+              <td><code>/v1/embeddings</code> 或 path 以 <code>embeddings</code> 结尾</td>
+              <td><code>RelayModeEmbeddings</code></td>
+              <td><code>EmbeddingHelper</code></td>
+              <td><code>/v1/engines/:model/embeddings</code> 也靠后缀命中。</td>
+            </tr>
+            <tr>
+              <td><code>/v1/images/generations</code>、<code>/v1/images/edits</code></td>
+              <td><code>RelayModeImagesGenerations</code> / <code>RelayModeImagesEdits</code></td>
+              <td><code>ImageHelper</code></td>
+              <td>图片生成/编辑的请求校验、上游转换和响应解析在 image helper + adaptor 中完成。</td>
+            </tr>
+            <tr>
+              <td><code>/v1/audio/speech</code>、<code>/v1/audio/transcriptions</code>、<code>/v1/audio/translations</code></td>
+              <td><code>RelayModeAudioSpeech</code> / <code>AudioTranscription</code> / <code>AudioTranslation</code></td>
+              <td><code>AudioHelper</code></td>
+              <td>Distributor 还会给 speech/transcription/translation 补默认模型。</td>
+            </tr>
+            <tr>
+              <td><code>/v1/responses/compact</code>、<code>/v1/responses</code></td>
+              <td><code>RelayModeResponsesCompact</code> / <code>RelayModeResponses</code></td>
+              <td><code>ResponsesHelper</code></td>
+              <td>compact 要先判断，因为它也是 <code>/v1/responses</code> 前缀。</td>
+            </tr>
+            <tr>
+              <td><code>/v1/rerank</code>、<code>/v1/realtime</code></td>
+              <td><code>RelayModeRerank</code> / <code>RelayModeRealtime</code></td>
+              <td><code>RerankHelper</code> / Realtime WebSocket 链路</td>
+              <td>Realtime 入口先升级 WebSocket，再进入对应 relay 格式处理。</td>
+            </tr>
+            <tr>
+              <td><code>/v1beta/models/*</code>、<code>/v1/models/*</code></td>
+              <td><code>RelayModeGemini</code></td>
+              <td><code>geminiRelayHandler</code></td>
+              <td>模型名通常从 path 中提取，而不是只从 body.model 读取。</td>
+            </tr>
+            <tr>
+              <td><code>/mj/*</code></td>
+              <td><code>Path2RelayModeMidjourney(path)</code></td>
+              <td><code>RelayMidjourney</code> / Midjourney task handler</td>
+              <td>Midjourney 是单独的 path 子分类，不走普通 chat/image/audio helper。</td>
+            </tr>
+            <tr>
+              <td>Path2RelayMode 返回 <code>Unknown</code>，但中间件已设置 <code>relay_mode</code></td>
+              <td>例如 <code>RelayModeVideoSubmit</code> / <code>RelayModeVideoFetchByID</code></td>
+              <td><code>RelayTask</code> / <code>RelayTaskFetch</code></td>
+              <td>视频、Suno、Kling、Jimeng 等任务入口主要靠 Distributor 或转换中间件补充 relay_mode / platform。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="group-logic">
+      <div class="section-head">
+        <h2>Group 如何串联 User、API Key、Channel</h2>
+        <p class="section-note">User 的 group 是默认归属，API Key 的 group 是本 key 请求时希望使用的目标分组，Channel 的 group 是这个渠道能服务哪些分组。</p>
+      </div>
+
+      <div class="callout" style="margin-bottom: 14px;">
+        <strong>界面里的“用户可选”勾选就是这层白名单。</strong>
+        分组管理中勾上“用户可选”会进入 <code>UserUsableGroups</code>；特殊可用分组规则 <code>GroupSpecialUsableGroup</code> 会按用户默认组做额外增删。它们不会改变用户所属组，只决定用户可以创建或选择哪些 token group。
+      </div>
+
+      <div class="section-head" style="margin-top: 22px;">
+        <h2>Channel 选择关系图</h2>
+        <p class="section-note">把 <code>candidate_channels = channels where group contains effective_group and models contains request.model</code> 拆成两个肉眼可见的筛选条件：先看 group 是否服务本次请求，再看 model 是否支持本次模型。</p>
+      </div>
+
+      <div class="diagram-panel scroll-x" style="margin-bottom: 14px;">
+        <svg viewBox="0 0 1180 520" role="img" aria-label="Channel 选择关系图">
+          <defs>
+            <marker id="arrow6" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+              <path d="M0,0 L9,4.5 L0,9 Z" fill="#596273"></path>
+            </marker>
+            <style>
+              .cbox { fill: #fff; stroke: #d7dde8; stroke-width: 2; }
+              .cfilter { fill: #eef4ff; stroke: #9bb9ed; stroke-width: 2; }
+              .cpass { fill: #eefbf4; stroke: #7ac79b; stroke-width: 2; }
+              .creject { fill: #fff1f0; stroke: #ee8b83; stroke-width: 2; }
+              .cwarn { fill: #fffaf0; stroke: #e0b15d; stroke-width: 2; }
+              .ctitle { font: 800 14px 'Segoe UI', sans-serif; fill: #172033; }
+              .ctext { font: 12px 'Segoe UI', sans-serif; fill: #596273; }
+              .csmall { font: 11px 'Segoe UI', sans-serif; fill: #667085; }
+              .cedge { stroke: #596273; stroke-width: 2; fill: none; marker-end: url(#arrow6); }
+              .cdash { stroke-dasharray: 6 6; }
+            </style>
+          </defs>
+
+          <rect x="36" y="44" width="248" height="92" rx="8" class="cfilter"></rect>
+          <text x="58" y="75" class="ctitle">本次请求的两个筛选值</text>
+          <text x="58" y="101" class="ctext">effective_group = globalSDTest</text>
+          <text x="58" y="122" class="ctext">request.model = doubao-seedance-2-0-filter-off</text>
+
+          <rect x="365" y="28" width="270" height="128" rx="8" class="cbox"></rect>
+          <text x="388" y="59" class="ctitle">所有启用渠道</text>
+          <text x="388" y="85" class="ctext">每个 channel 都有两组列表字段：</text>
+          <text x="388" y="107" class="ctext">1. channel.group：服务哪些分组</text>
+          <text x="388" y="129" class="ctext">2. channel.models：支持哪些模型</text>
+
+          <polygon points="765,36 910,92 765,148 620,92" class="cwarn"></polygon>
+          <text x="704" y="88" class="ctitle">两个条件同时满足?</text>
+          <text x="704" y="111" class="csmall">group 命中 AND model 命中</text>
+
+          <rect x="966" y="50" width="178" height="84" rx="8" class="cpass"></rect>
+          <text x="990" y="82" class="ctitle">候选渠道</text>
+          <text x="990" y="108" class="ctext">再按 priority / weight</text>
+          <text x="990" y="128" class="ctext">选出一个最终 channel</text>
+
+          <path d="M284 90 H365" class="cedge"></path>
+          <path d="M635 92 H620" class="cedge"></path>
+          <path d="M910 92 H966" class="cedge"></path>
+
+          <rect x="46" y="226" width="300" height="88" rx="8" class="cpass"></rect>
+          <text x="68" y="256" class="ctitle">Channel #1 hwdrama85oversea</text>
+          <text x="68" y="282" class="ctext">group = AlbertG, globalSDTest</text>
+          <text x="68" y="303" class="ctext">models 包含 doubao-seedance-2-0-filter-off</text>
+
+          <rect x="426" y="226" width="300" height="88" rx="8" class="creject"></rect>
+          <text x="448" y="256" class="ctitle">Channel #2 yanyunai</text>
+          <text x="448" y="282" class="ctext">group = default</text>
+          <text x="448" y="303" class="ctext">group 不包含 globalSDTest，直接淘汰</text>
+
+          <rect x="806" y="226" width="300" height="88" rx="8" class="creject"></rect>
+          <text x="828" y="256" class="ctitle">Channel #3 wetoken</text>
+          <text x="828" y="282" class="ctext">group = globalSDTest2</text>
+          <text x="828" y="303" class="ctext">group 不包含 globalSDTest，直接淘汰</text>
+
+          <rect x="46" y="382" width="300" height="72" rx="8" class="cpass"></rect>
+          <text x="68" y="412" class="ctitle">保留为 candidate</text>
+          <text x="68" y="436" class="ctext">#1 同时满足 group 与 model</text>
+
+          <rect x="426" y="382" width="300" height="72" rx="8" class="cbox"></rect>
+          <text x="448" y="412" class="ctitle">如果有多个 candidate</text>
+          <text x="448" y="436" class="ctext">先看 priority，再按 weight 随机</text>
+
+          <rect x="806" y="382" width="300" height="72" rx="8" fill="#172033"></rect>
+          <text x="828" y="412" font-family="Segoe UI, sans-serif" font-size="14" font-weight="800" fill="#fff">最终选中 channel</text>
+          <text x="828" y="436" font-family="Segoe UI, sans-serif" font-size="12" fill="#cbd5e1">写入 channel_id，并读取 base_url / key / type</text>
+
+          <path d="M196 314 V382" class="cedge"></path>
+          <path d="M346 418 H426" class="cedge"></path>
+          <path d="M726 418 H806" class="cedge"></path>
+          <path d="M576 314 V382" class="cedge cdash"></path>
+          <path d="M956 314 V382" class="cedge cdash"></path>
+          <text x="520" y="350" class="csmall">淘汰</text>
+          <text x="900" y="350" class="csmall">淘汰</text>
+        </svg>
+      </div>
+
+      <div class="callout" style="margin-bottom: 14px;">
+        <strong>更口语化地说：</strong>一次请求会拿着两张“门票”去找渠道：一张是 <code>effective_group</code>，一张是 <code>request.model</code>。某个 channel 只有在“服务分组列表里有这张 group 票”并且“模型列表里有这张 model 票”时，才会进入候选池。进入候选池以后，才轮到优先级、权重、重试等规则。
+      </div>
+
+      <div class="diagram-panel scroll-x">
+        <svg viewBox="0 0 1080 360" role="img" aria-label="Group 串联关系图">
+          <defs>
+            <marker id="arrow5" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+              <path d="M0,0 L9,4.5 L0,9 Z" fill="#596273"></path>
+            </marker>
+            <style>
+              .gbox { fill: #fff; stroke: #d7dde8; stroke-width: 2; }
+              .gtitle { font: 800 15px 'Segoe UI', sans-serif; fill: #172033; }
+              .gtext { font: 12px 'Segoe UI', sans-serif; fill: #596273; }
+              .gedge { stroke: #596273; stroke-width: 2; fill: none; marker-end: url(#arrow5); }
+              .gchip { fill: #eef4ff; stroke: #bcd0f2; }
+            </style>
+          </defs>
+
+          <rect x="36" y="58" width="190" height="96" rx="8" class="gbox"></rect>
+          <text x="60" y="92" class="gtitle">User.group</text>
+          <text x="60" y="118" class="gtext">单值：用户默认分组</text>
+          <text x="60" y="138" class="gtext">例如 default / AlbertG</text>
+
+          <rect x="296" y="58" width="204" height="96" rx="8" class="gbox"></rect>
+          <text x="320" y="92" class="gtitle">User Usable Groups</text>
+          <text x="320" y="118" class="gtext">可用分组集合</text>
+          <text x="320" y="138" class="gtext">全局配置 + 特殊加减</text>
+
+          <rect x="570" y="58" width="190" height="96" rx="8" class="gbox"></rect>
+          <text x="594" y="92" class="gtitle">Token.group</text>
+          <text x="594" y="118" class="gtext">单值或空</text>
+          <text x="594" y="138" class="gtext">必须属于可用集合</text>
+
+          <rect x="830" y="58" width="190" height="96" rx="8" class="gbox"></rect>
+          <text x="854" y="92" class="gtitle">Effective Group</text>
+          <text x="854" y="118" class="gtext">token.group 非空则优先</text>
+          <text x="854" y="138" class="gtext">否则使用 user.group</text>
+
+          <rect x="236" y="236" width="230" height="82" rx="8" class="gbox"></rect>
+          <text x="260" y="270" class="gtitle">Channel.group</text>
+          <text x="260" y="296" class="gtext">多值：逗号分隔的服务范围</text>
+
+          <rect x="584" y="236" width="260" height="82" rx="8" class="gbox"></rect>
+          <text x="608" y="270" class="gtitle">Ability(group, model, channel)</text>
+          <text x="608" y="296" class="gtext">每个 group × model 展开成候选能力</text>
+
+          <rect x="468" y="172" width="146" height="40" rx="20" class="gchip"></rect>
+          <text x="496" y="197" class="gtitle" font-size="13">request.model</text>
+
+          <path d="M226 106 H296" class="gedge"></path>
+          <path d="M500 106 H570" class="gedge"></path>
+          <path d="M760 106 H830" class="gedge"></path>
+          <path d="M925 154 C915 218 860 250 844 270" class="gedge"></path>
+          <path d="M466 277 H584" class="gedge"></path>
+          <path d="M541 212 C556 235 580 250 608 270" class="gedge"></path>
+          <path d="M351 236 C394 184 474 174 514 172" class="gedge"></path>
+        </svg>
+      </div>
+
+      <div class="split" style="margin-top: 14px;">
+        <div class="card">
+          <h3><span class="icon i-group">G</span>单次请求的 effective group</h3>
+          <p>单次请求最终只会使用一个有效分组。token.group 非空且在该用户可用分组集合里时，优先使用 token.group；否则回退到 user.group。</p>
+          <div class="equation">
+            <code>effective_group = token.group || user.group</code>
+            <span>然后</span>
+            <code>candidate_channels = group + model 命中</code>
+          </div>
+        </div>
+        <div class="card">
+          <h3><span class="icon i-key">K</span>归属与可用集合不是一回事</h3>
+          <p><code>User.group</code> 是“用户所属默认组”，是单值；<code>UserUsableGroups</code> 是“这个用户允许选择哪些目标 group”的白名单集合。集合不是用户同时属于多个组，而是 token/playground 可以切换到哪些被授权的目标组。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="production-examples">
+      <div class="section-head">
+        <h2>生产例子：从 /v1/video/generations 到豆包视频 channel</h2>
+        <p class="section-note">下面是生产 Seedance 2.0 路由口径，用来把抽象流程落到真实字段上。</p>
+      </div>
+
+      <div class="scroll-x">
+        <table>
+          <thead>
+            <tr>
+              <th>步骤</th>
+              <th>实际值</th>
+              <th>判断结果</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>客户请求</td>
+              <td><code>POST /v1/video/generations</code>，<code>model=doubao-seedance-2-0-filter-off</code></td>
+              <td>视频路由接住，Distributor 设置 <code>RelayModeVideoSubmit</code>。</td>
+            </tr>
+            <tr>
+              <td>API Key</td>
+              <td>token name <code>fission test</code>，token ID <code>6</code></td>
+              <td>Token 有效，关联用户 <code>fission</code>。</td>
+            </tr>
+            <tr>
+              <td>Group 解析</td>
+              <td><code>token.group=globalSDTest</code></td>
+              <td>本次请求使用 <code>effective_group=globalSDTest</code>。</td>
+            </tr>
+            <tr>
+              <td>候选渠道</td>
+              <td><code>group=globalSDTest</code> + <code>model=doubao-seedance-2-0-filter-off</code></td>
+              <td>命中 <code>channel_id=1</code>，<code>hwdrama85oversea</code>。</td>
+            </tr>
+            <tr>
+              <td>Channel Type</td>
+              <td><code>channels.type=54</code>，<code>base_url=https://foxtoken.linkomobile.com</code></td>
+              <td>使用 DoubaoVideo task adaptor，提交到 <code>/api/v3/contents/generations/tasks</code>。</td>
+            </tr>
+            <tr>
+              <td>上游结果</td>
+              <td>task <code>task_NniRYUYRJzHFKW7nkk9fsi7tDFJ6z1vb</code>，上游 <code>cgt-20260709145533-rhs2g</code></td>
+              <td>最终 <code>SUCCESS</code>，返回 <code>ratio=9:16</code>、<code>total_tokens=50638</code>。</td>
+            </tr>
+            <tr>
+              <td>计费</td>
+              <td><code>int(50638 / 1000000 * 7.0 * 500000 * 1) = 177233 quota</code></td>
+              <td>实际费用 <code>$0.354466</code>。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="takeaways">
+      <div class="section-head">
+        <h2>快速记忆</h2>
+        <p class="section-note">看代码时可以按下面的口径定位问题。</p>
+      </div>
+
+      <div class="grid scenario-grid">
+        <div class="card">
+          <h3>Endpoint 决定入口形态</h3>
+          <p><code>/v1/chat/completions</code>、<code>/v1/images/generations</code>、<code>/v1/video/generations</code> 先把请求分到不同的 controller/helper/task 链路。</p>
+        </div>
+        <div class="card">
+          <h3>RelayMode 决定 helper</h3>
+          <p>普通同步 relay 用 <code>Path2RelayMode</code> 推断，然后在 <code>relayHandler</code> 中选择 Text/Image/Audio/Responses 等 helper。</p>
+        </div>
+        <div class="card">
+          <h3>Group + Model 决定候选渠道</h3>
+          <p>effective group 与 request.model 命中 ability 后，才会在候选渠道里按 priority/weight 选择具体 channel。</p>
+        </div>
+        <div class="card">
+          <h3>channels.type 决定上游协议</h3>
+          <p>选中 channel 之后，type 才开始发挥作用：同步调用找普通 adaptor，异步任务找 task adaptor。</p>
+        </div>
+      </div>
+    </section>
+
+    <p class="footer">new-api usage concepts · generated for production routing and billing review</p>
+  </main>
+</body>
+</html>

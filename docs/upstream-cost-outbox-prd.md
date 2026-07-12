@@ -114,6 +114,8 @@ new-api 需要在以下生命周期点写入事件：
 | `billing.downstream_delta` | 下游计费发生变化 | 统一记录预扣费、结算、退款、差额调整等 quota delta，用于收入 ledger |
 | `billing.downstream_settled` | 下游计费完成 | 兼容型事件；也可作为 `billing.downstream_delta` 且 `billing_stage=settle` 处理 |
 
+`task.completed` / `task.failed` 是 new-api 内部 outbox 生命周期命名。Dispatcher 投递到 TokenOperation 时会转换为运营平台 adapter 识别的 `upstream.task_succeeded` / `upstream.task_failed`，同时补齐 `relay_format=volcengine-ark`、`relay_mode=async_video` 等标准字段。
+
 ### 7.2 事件字段
 
 Outbox 事件必须包含足够的归因字段：
@@ -411,30 +413,41 @@ extra := map[string]any{
 
 #### 7.2.6 new-api 到 TokenOperation 的 Provider Event 契约
 
-new-api 不直接调用现有 `/api/v1/gateway/usage-events`，因为该接口接收的是已经标准化的 `usage_quantities`。new-api 应新增 outbox dispatcher，投递到 TokenOperation 的 provider raw event 入站接口，例如：
+new-api 不直接调用现有 `/api/v1/gateway/usage-events`，因为该接口接收的是已经标准化的 `usage_quantities`。new-api 的 outbox dispatcher 投递到 TokenOperation 的 provider raw event 入站接口。运营平台生产 base url 为 `https://ops.ai.p35q.cn/`，批量投递完整地址为：
 
 ```text
-POST /api/v1/gateway/provider-events
-POST /api/v1/gateway/provider-events/bulk
+POST https://ops.ai.p35q.cn/api/v1/gateway/provider-events/bulk
 ```
 
-推荐事件 payload：
+请求头必须与 TokenOperation Gateway API 对齐：
+
+```text
+Content-Type: application/json
+x-gateway-key: <TokenOperation gateway credential>
+idempotency-key: <stable batch id>
+x-schema-version: provider-event-bulk-v1
+x-gateway-id: <deployment gateway id>
+```
+
+批量 body 使用 `batchId + providerEvents[]`，不是旧的 `events[]` 包装。`idempotency-key` header 表示本次批量投递尝试；每条 provider event 仍使用自己的 `idempotency_key` 或 `event_id` 做行级幂等。
+
+推荐单条 `providerEvents[]` payload：
 
 ```json
 {
-  "source_system": "new-api:nexus-sg-prod",
+  "idempotency_key": "evt_01HX...",
+  "source_system": "new-api",
   "event_id": "evt_01HX...",
-  "event_type": "task.completed",
+  "event_type": "upstream.task_succeeded",
   "occurred_at": "2026-07-05T12:00:00Z",
   "request_id": "20260705120000...",
-  "task_id": "task_xxx",
-  "upstream_task_id": "vgt-xxx",
   "customer_context": {
     "gateway_customer_id": "user_123",
     "gateway_user_id": "123",
     "token_id": "456",
     "api_key_fingerprint": "sha256:...",
     "api_key_last4": "abcd",
+    "api_key_redacted": true,
     "group": "default"
   },
   "routing_context": {
@@ -445,31 +458,38 @@ POST /api/v1/gateway/provider-events/bulk
     "origin_model_name": "doubao-seedance-2-0-filter-off",
     "upstream_model_name": "doubao-seedance-2-0-filter-off",
     "call_type": "video_generation",
-    "relay_mode": "video_task",
-    "relay_format": "openai_compatible",
+    "relay_mode": "async_video",
+    "relay_format": "volcengine-ark",
     "method": "POST",
     "path": "/v1/video/generations",
     "upstream_base_url": "https://..."
   },
-  "usage_context": {
-    "raw_usage_json": {},
-    "usage_json": {},
-    "request_metadata_json": {
-      "duration": 5,
-      "resolution": "480p",
-      "aspect_ratio": "1:1"
-    },
-    "response_metadata_json": {
-      "task_status": "succeeded",
-      "result_count": 1
-    },
-    "extra_json": {
-      "usage_quality_hint": "derived"
+  "request_body_json": {
+    "duration": 5,
+    "resolution": "480p",
+    "aspect_ratio": "1:1"
+  },
+  "response_body_json": {
+    "id": "vgt-xxx",
+    "status": "succeeded",
+    "result_count": 1
+  },
+  "raw_usage_json": {
+    "usage": {
+      "duration_seconds": 5,
+      "request_count": 1,
+      "status": "succeeded"
     }
   },
   "payload_hashes": {
     "request_body_hash": "sha256:...",
     "response_body_hash": "sha256:..."
+  },
+  "extra_json": {
+    "task_id": "task_xxx",
+    "upstream_task_id": "vgt-xxx",
+    "provider_status": "succeeded",
+    "usage_quality_hint": "derived"
   }
 }
 ```
@@ -477,8 +497,11 @@ POST /api/v1/gateway/provider-events/bulk
 关键约束：
 
 - `token_id` 是 new-api `tokens.id`，不是 `sk-...` 明文。
-- `source_system + event_id` 是 TokenOperation 入站幂等键。
+- `source_system` 默认固定为 `new-api`，这样能命中 TokenOperation 已配置的 normalization profile；部署实例放在 `x-gateway-id` 或 `extra_json` 中，不拼进 `source_system`。
+- `source_system + event_id` 是 TokenOperation 入站幂等键；批量请求的 `idempotency-key` 只是批次级重试证据。
 - `call_type` 必须使用 TokenOperation 与官方价、客户价、供应商成本规则共享的一套字典。
+- 同步文本类调用使用 `call_type=text_generation`；Claude 使用 `relay_format=anthropic, relay_mode=messages`，Gemini 使用 `relay_format=gemini, relay_mode=generate_content`，OpenAI-compatible 使用 `relay_format=openai-compatible, relay_mode=chat|responses`。
+- Seedance 异步视频终态投递给 TokenOperation 时使用 `event_type=upstream.task_succeeded|upstream.task_failed`，并使用 `relay_format=volcengine-ark, relay_mode=async_video`。
 - `raw_usage_json` 应尽量来自供应商官方 API 原始 usage 字段；如果只拿到 OpenAI-compatible 转换后的 usage，必须在 `extra_json` 或 `normalization_evidence` 中标记来源。
 - `model_name + call_type` 负责匹配官方价基准，`routing_context.channel_id` 负责决定向哪个上游供应商归属成本。
 
@@ -503,13 +526,13 @@ adapter 输出标准 usage fact，并进入现有 settlement：
   "adapter_version": "v1",
   "usage_quality": "official",
   "usage_quantities": [
-    { "metric_code": "input_tokens", "quantity": "1000" },
-    { "metric_code": "output_tokens", "quantity": "200" },
-    { "metric_code": "cache_read_tokens", "quantity": "300" }
+    { "metric_code": "input_token", "quantity": "1000" },
+    { "metric_code": "output_token", "quantity": "200" },
+    { "metric_code": "cache_read_token", "quantity": "300" }
   ],
   "usage_attributes": {
     "model_name": "claude-3-5-sonnet",
-    "call_type": "chat_completion"
+    "call_type": "text_generation"
   },
   "normalization_evidence": {
     "raw_paths": {
@@ -619,19 +642,24 @@ new-api 内部启动异步 dispatcher：
 
 ```text
 UPSTREAM_EVENT_ENABLED=true
-UPSTREAM_EVENT_WEBHOOK_URL=https://token-operation.example.com/api/v1/gateway/provider-events/bulk
-UPSTREAM_EVENT_WEBHOOK_SECRET=***
-UPSTREAM_EVENT_BATCH_SIZE=100
+UPSTREAM_EVENT_SOURCE_SYSTEM=new-api
+UPSTREAM_EVENT_GATEWAY_ID=nexus-sg-new-api-green
+UPSTREAM_EVENT_GATEWAY_KEY=***
+UPSTREAM_EVENT_TOKENOP_BASE_URL=https://ops.ai.p35q.cn/
+UPSTREAM_EVENT_WEBHOOK_URL=https://ops.ai.p35q.cn/api/v1/gateway/provider-events/bulk
+UPSTREAM_EVENT_SCHEMA_VERSION=provider-event-bulk-v1
+UPSTREAM_EVENT_WEBHOOK_SECRET=
+UPSTREAM_EVENT_DISPATCH_BATCH_SIZE=100
 UPSTREAM_EVENT_MAX_RETRY=10
 UPSTREAM_EVENT_BODY_MODE=redacted
 UPSTREAM_EVENT_RETENTION_DAYS=30
 ```
 
-Webhook 必须加签：
+TokenOperation 鉴权以 `x-gateway-key` 为准。`UPSTREAM_EVENT_WEBHOOK_SECRET` 仅作为额外 HMAC 防篡改能力保留；如果运营平台网关未要求 HMAC，可留空。
+
+启用 HMAC 时附加 header：
 
 ```text
-X-New-Api-Event-Id
-X-New-Api-Event-Type
 X-New-Api-Event-Timestamp
 X-New-Api-Event-Signature
 ```
@@ -1421,8 +1449,8 @@ GET  /api/upstream-events/stats
 ### 12.2 TokenOperation API
 
 ```text
-POST /api/v1/gateway/provider-events
-POST /api/v1/gateway/provider-events/bulk
+POST https://ops.ai.p35q.cn/api/v1/gateway/provider-events
+POST https://ops.ai.p35q.cn/api/v1/gateway/provider-events/bulk
 GET  /provider-raw-events
 GET  /provider-raw-events/:id
 POST /provider-raw-events/:id/reprocess
@@ -1454,6 +1482,8 @@ GET  /margin-reports/summary
 POST /provider-bill-imports
 GET  /reconciliation-runs
 ```
+
+Gateway 入站鉴权使用 `x-gateway-key`；写入类请求使用 `idempotency-key`；批量 provider raw event 使用 `x-schema-version=provider-event-bulk-v1` 和 body `{"batchId":"...","providerEvents":[...]}`。
 
 ### 12.3 规则校验 API
 
@@ -1589,7 +1619,7 @@ POST /cost-rules/preview
 
 ### 14.3 安全
 
-- webhook 使用 HMAC 签名。
+- TokenOperation Gateway API 使用 `x-gateway-key` 鉴权，gateway key 只放环境变量；HMAC 签名是可选的额外防篡改层。
 - 管理页面需要管理员权限。
 - raw body 保存必须有独立开关和审计记录。
 - 敏感 header 永不保存。
@@ -1631,15 +1661,20 @@ new-api 侧：
 
 ```text
 UPSTREAM_EVENT_ENABLED=false
-UPSTREAM_EVENT_SOURCE_SYSTEM=new-api:<deployment>
-UPSTREAM_EVENT_WEBHOOK_URL=https://token-operation.example.com/api/v1/gateway/provider-events/bulk
-UPSTREAM_EVENT_WEBHOOK_SECRET=***
+UPSTREAM_EVENT_SOURCE_SYSTEM=new-api
+UPSTREAM_EVENT_GATEWAY_ID=<deployment>
+UPSTREAM_EVENT_GATEWAY_KEY=***
+UPSTREAM_EVENT_TOKENOP_BASE_URL=https://ops.ai.p35q.cn/
+UPSTREAM_EVENT_WEBHOOK_URL=https://ops.ai.p35q.cn/api/v1/gateway/provider-events/bulk
+UPSTREAM_EVENT_SCHEMA_VERSION=provider-event-bulk-v1
+UPSTREAM_EVENT_WEBHOOK_SECRET=
 UPSTREAM_EVENT_WRITE_MODE=hybrid
 UPSTREAM_EVENT_BODY_MODE=metadata
 UPSTREAM_EVENT_SYNC_TIMEOUT_MS=100
 ```
 
 - 明确 `token_id=tokens.id`，只传 `api_key_fingerprint` 和 `api_key_last4`，不传 API Key 明文。
+- 明确 TokenOperation Gateway API 鉴权使用 `x-gateway-key`，密钥只从环境变量读取，不进入代码、日志或 outbox payload。
 - 明确 `call_type` 字典来源，与 TokenOperation 的官方价、客户价、供应商成本规则共用。
 - 默认只采集 `raw_usage_json`、`usage_json`、request/response metadata、payload hash 和必要 extra，不采集完整 prompt/response。
 
@@ -1796,7 +1831,7 @@ new-api 侧明确不做的事情：
 
 ## 18. 待确认问题
 
-- TokenOperation provider-events API 的最终路径、鉴权方式和批量大小限制。
+- TokenOperation provider-events API 已确认使用 `https://ops.ai.p35q.cn/api/v1/gateway/provider-events/bulk`、`x-gateway-key`、`idempotency-key`、`provider-event-bulk-v1`，仍需确认生产租户 gateway key 的创建、轮换和批量限额策略。
 - 是否允许在生产保存脱敏后的请求 body？
 - 哪些渠道允许开启 raw body？
 - 上游成本默认使用官方价、协议价，还是账单导入价优先？
@@ -1847,7 +1882,7 @@ new-api 明确不承担：
 | `service/upstreamevent/types.go` | 定义 provider event schema、`billing.downstream_delta`、task 事件、schema version | 独立协议定义 |
 | `service/upstreamevent/config.go` | 读取环境变量：开关、TokenOperation URL、签名密钥、写入模式、队列大小、body mode、超时 | 默认关闭，生产可灰度 |
 | `service/upstreamevent/writer.go` | 实现 `sync` / `async` / `hybrid` 写入，本地 outbox insert 和内存队列 | 请求链路只做轻量事件写入 |
-| `service/upstreamevent/dispatcher.go` | 批量投递 TokenOperation `/provider-events/bulk`，HMAC 签名、重试、dead event | 事件投递和主请求解耦 |
+| `service/upstreamevent/dispatcher.go` | 批量投递 TokenOperation `/provider-events/bulk`，附带 `x-gateway-key`、`idempotency-key`、可选 HMAC、重试、dead event | 事件投递和主请求解耦 |
 | `service/upstreamevent/builder.go` | 从 `RelayInfo`、`Task`、`Usage` 构造 customer/routing/usage context | 统一事件构造，减少业务文件拼字段 |
 | `service/upstreamevent/sanitize.go` | 请求/响应 metadata 白名单、hash、脱敏、敏感字段删除 | 隐私和合规边界 |
 | `service/upstreamevent/raw_usage.go` | 提供 `SetRawUsage(ctx, provider, format, raw)` / `GetRawUsage(ctx)` 等上下文 carrier | provider 文件只需小补丁 |
@@ -1900,15 +1935,16 @@ Provider 文件只做“捕获官方 raw usage 并放到统一 carrier”，不�
 
 ```text
 schema_version=v1
-source_system=new-api:<deployment>
+source_system=new-api
 event_id=evt_<hash>
 event_type=...
 occurred_at=...
+x-gateway-id=<deployment>
 ```
 
 约束：
 
-- `source_system + event_id` 是 TokenOperation 入站幂等键。
+- `source_system + event_id` 是 TokenOperation 入站幂等键；`source_system` 默认保持 `new-api`，部署差异使用 `x-gateway-id`，避免 profile 匹配被实例名打散。
 - new-api 中的 `token_id` 只表示 `tokens.id`，不能传 `sk-...` 明文。
 - `call_type` 必须使用 TokenOperation 统一字典。
 - `relay_mode` 表示业务能力生命周期，`relay_format` 表示协议/DTO 语义，两者不能合并。
@@ -1920,9 +1956,13 @@ occurred_at=...
 
 ```text
 UPSTREAM_EVENT_ENABLED=false
-UPSTREAM_EVENT_SOURCE_SYSTEM=new-api:<deployment>
+UPSTREAM_EVENT_SOURCE_SYSTEM=new-api
+UPSTREAM_EVENT_GATEWAY_ID=<deployment>
+UPSTREAM_EVENT_GATEWAY_KEY=
+UPSTREAM_EVENT_TOKENOP_BASE_URL=https://ops.ai.p35q.cn/
 UPSTREAM_EVENT_WEBHOOK_URL=
 UPSTREAM_EVENT_WEBHOOK_SECRET=
+UPSTREAM_EVENT_SCHEMA_VERSION=provider-event-bulk-v1
 UPSTREAM_EVENT_WRITE_MODE=hybrid
 UPSTREAM_EVENT_BODY_MODE=metadata
 UPSTREAM_EVENT_SYNC_TIMEOUT_MS=100

@@ -1,6 +1,7 @@
 package upstreamevent
 
 import (
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -40,6 +41,10 @@ func Start() {
 		startAsyncWriter(cfg)
 	}
 	if cfg.WebhookURL != "" {
+		if strings.TrimSpace(cfg.GatewayKey) == "" {
+			common.SysLog("upstream event dispatcher disabled: UPSTREAM_EVENT_GATEWAY_KEY is required for TokenOperation")
+			return
+		}
 		go runDispatcher(cfg)
 	}
 }

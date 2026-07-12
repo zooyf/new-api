@@ -3,6 +3,82 @@
 This runbook records the known-good production test for generating a minimal
 Seedance 2.0 video from an overseas material-library asset.
 
+## One-Command Production Regression
+
+Use this script for repeatable production checks instead of manually submitting,
+polling, querying logs, and checking the generated MP4. It reads the named
+new-api token from the production database through SSH, but does not print the
+secret key.
+
+```powershell
+.\scripts\test-seedance-video-e2e.ps1 `
+  -TokenName "fission test" `
+  -Model "doubao-seedance-2-0-filter-off" `
+  -AssetUrl "asset://asset-20260708115604-8nrb2" `
+  -Ratio "9:16" `
+  -Resolution "480p" `
+  -DurationSeconds 5
+```
+
+The upstream generation itself can still take a few minutes. The script
+automates the slow part: submit, poll until terminal status, assert the returned
+ratio when present, verify the video URL, and print the selected channel plus
+billing logs.
+
+Keep `ratio` under `metadata.ratio`. The current Doubao video adaptor forwards
+`metadata.ratio` to the upstream Seedance request; a top-level `ratio` field is
+only documentation-friendly and is not used by this adaptor.
+
+Latest fission 9:16 asset regression:
+
+- Verification time: `2026-07-09`
+- Token: production token name `fission test`, token ID `6`
+- Required token group: `globalSDTest`
+- Selected channel: `hwdrama85oversea`, channel ID `1`, channel type `54`
+- Upstream submit endpoint:
+  `https://foxtoken.linkomobile.com/api/v3/contents/generations/tasks`
+- Model: `doubao-seedance-2-0-filter-off`
+- Asset: `asset://asset-20260708115604-8nrb2`
+- Resolution: `480p`
+- Duration: `5`
+- Ratio: `9:16`
+- Local task ID: `task_NniRYUYRJzHFKW7nkk9fsi7tDFJ6z1vb`
+- Upstream task ID: `cgt-20260709145533-rhs2g`
+- Final status: `SUCCESS`, upstream status `succeeded`
+- Upstream usage: `total_tokens=50638`, `completion_tokens=50638`
+- Actual charge: `177233 quota`, or `$0.354466`
+
+Billing calculation:
+
+```text
+int(50638 / 1000000 * 7.0 * 500000 * 1) = 177233 quota
+177233 / 500000 = $0.354466
+```
+
+Known-good request body:
+
+```json
+{
+  "model": "doubao-seedance-2-0-filter-off",
+  "prompt": "Create a 5 second vertical 9:16 image-to-video test from the reference asset. Keep the subject stable with subtle natural motion, no camera movement, no text, no audio.",
+  "duration": 5,
+  "resolution": "480p",
+  "metadata": {
+    "ratio": "9:16",
+    "generate_audio": false,
+    "content": [
+      {
+        "type": "image_url",
+        "role": "first_frame",
+        "image_url": {
+          "url": "asset://asset-20260708115604-8nrb2"
+        }
+      }
+    ]
+  }
+}
+```
+
 ## Foxtoken AlbertG Filter-Off Verification
 
 This case was verified after deploying the official Seedance 2.0 completion

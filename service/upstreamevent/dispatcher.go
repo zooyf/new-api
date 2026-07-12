@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -32,6 +33,10 @@ func dispatchOnce(cfg Config) {
 	if cfg.WebhookURL == "" {
 		return
 	}
+	if strings.TrimSpace(cfg.GatewayKey) == "" {
+		common.SysLog("upstream event dispatch skipped: UPSTREAM_EVENT_GATEWAY_KEY is required for TokenOperation")
+		return
+	}
 	now := time.Now().Unix()
 	events, err := model.LeaseUpstreamEventOutbox(cfg.DispatcherBatchSize, now)
 	if err != nil {
@@ -42,7 +47,7 @@ func dispatchOnce(cfg Config) {
 		return
 	}
 
-	payloadEvents := make([]ProviderEvent, 0, len(events))
+	payloadEvents := make([]tokenOperationProviderEvent, 0, len(events))
 	rowsByPayloadIndex := make([]model.UpstreamEventOutbox, 0, len(events))
 	for _, row := range events {
 		var event ProviderEvent
@@ -50,19 +55,20 @@ func dispatchOnce(cfg Config) {
 			_ = model.MarkUpstreamEventOutboxDead(row.ID, "invalid payload: "+err.Error())
 			continue
 		}
-		payloadEvents = append(payloadEvents, event)
+		payloadEvents = append(payloadEvents, tokenOperationProviderEventFrom(event))
 		rowsByPayloadIndex = append(rowsByPayloadIndex, row)
 	}
 	if len(payloadEvents) == 0 {
 		return
 	}
 
-	body, err := common.Marshal(bulkRequest{Events: payloadEvents})
+	batchID := tokenOperationBatchID(rowsByPayloadIndex)
+	body, err := common.Marshal(tokenOperationBulkRequest{BatchID: batchID, ProviderEvents: payloadEvents})
 	if err != nil {
 		markDispatchFailure(rowsByPayloadIndex, cfg, "marshal dispatch payload: "+err.Error())
 		return
 	}
-	statusCode, responsePreview, err := postEvents(cfg, body)
+	statusCode, responsePreview, err := postEvents(cfg, batchID, body)
 	if err != nil {
 		markDispatchFailure(rowsByPayloadIndex, cfg, err.Error())
 		return
@@ -79,7 +85,7 @@ func dispatchOnce(cfg Config) {
 	}
 }
 
-func postEvents(cfg Config, body []byte) (int, string, error) {
+func postEvents(cfg Config, batchID string, body []byte) (int, string, error) {
 	timeout := cfg.DispatcherRequestTimeout
 	if timeout <= 0 {
 		timeout = 30 * time.Second
@@ -89,6 +95,18 @@ func postEvents(cfg Config, body []byte) (int, string, error) {
 		return 0, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-gateway-key", cfg.GatewayKey)
+	if batchID != "" {
+		req.Header.Set("idempotency-key", batchID)
+	}
+	schemaVersion := cfg.SchemaVersion
+	if schemaVersion == "" {
+		schemaVersion = tokenOperationProviderEventBulkSchema
+	}
+	req.Header.Set("x-schema-version", schemaVersion)
+	if cfg.GatewayID != "" {
+		req.Header.Set("x-gateway-id", cfg.GatewayID)
+	}
 	if cfg.WebhookSecret != "" {
 		timestamp := fmt.Sprint(time.Now().Unix())
 		mac := hmac.New(sha256.New, []byte(cfg.WebhookSecret))

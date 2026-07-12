@@ -14,13 +14,20 @@ const (
 
 	bodyModeMetadata = "metadata"
 	bodyModeRedacted = "redacted"
+
+	tokenOperationProviderEventBulkPath       = "/api/v1/gateway/provider-events/bulk"
+	tokenOperationProviderEventBulkSchema     = "provider-event-bulk-v1"
+	defaultTokenOperationProviderSourceSystem = "new-api"
 )
 
 type Config struct {
 	Enabled                  bool
 	SourceSystem             string
+	GatewayID                string
+	GatewayKey               string
 	WebhookURL               string
 	WebhookSecret            string
+	SchemaVersion            string
 	WriteMode                string
 	BodyMode                 string
 	SyncTimeout              time.Duration
@@ -42,7 +49,22 @@ func LoadConfig() Config {
 	}
 	sourceSystem := strings.TrimSpace(os.Getenv("UPSTREAM_EVENT_SOURCE_SYSTEM"))
 	if sourceSystem == "" {
-		sourceSystem = "new-api:" + nodeName
+		sourceSystem = defaultTokenOperationProviderSourceSystem
+	}
+	gatewayID := strings.TrimSpace(os.Getenv("UPSTREAM_EVENT_GATEWAY_ID"))
+	if gatewayID == "" {
+		gatewayID = nodeName
+	}
+	webhookURL := strings.TrimSpace(os.Getenv("UPSTREAM_EVENT_WEBHOOK_URL"))
+	if webhookURL == "" {
+		baseURL := strings.TrimSpace(os.Getenv("UPSTREAM_EVENT_TOKENOP_BASE_URL"))
+		if baseURL != "" {
+			webhookURL = strings.TrimRight(baseURL, "/") + tokenOperationProviderEventBulkPath
+		}
+	}
+	schemaVersion := strings.TrimSpace(os.Getenv("UPSTREAM_EVENT_SCHEMA_VERSION"))
+	if schemaVersion == "" {
+		schemaVersion = tokenOperationProviderEventBulkSchema
 	}
 	writeMode := strings.ToLower(strings.TrimSpace(os.Getenv("UPSTREAM_EVENT_WRITE_MODE")))
 	if writeMode == "" {
@@ -61,8 +83,11 @@ func LoadConfig() Config {
 	return Config{
 		Enabled:                  strings.EqualFold(os.Getenv("UPSTREAM_EVENT_ENABLED"), "true"),
 		SourceSystem:             sourceSystem,
-		WebhookURL:               strings.TrimSpace(os.Getenv("UPSTREAM_EVENT_WEBHOOK_URL")),
+		GatewayID:                gatewayID,
+		GatewayKey:               os.Getenv("UPSTREAM_EVENT_GATEWAY_KEY"),
+		WebhookURL:               webhookURL,
 		WebhookSecret:            os.Getenv("UPSTREAM_EVENT_WEBHOOK_SECRET"),
+		SchemaVersion:            schemaVersion,
 		WriteMode:                writeMode,
 		BodyMode:                 bodyMode,
 		SyncTimeout:              time.Duration(envInt("UPSTREAM_EVENT_SYNC_TIMEOUT_MS", 100)) * time.Millisecond,

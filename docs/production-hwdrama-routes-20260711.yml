@@ -1,0 +1,169 @@
+version: 1
+actions:
+    aicc_asset_create:
+        downstream_method: POST
+        downstream_path: /api/openapi-maas/exp/aicc/v2/asset/
+        default_upstream_method: POST
+        default_upstream_path: /api/openapi-maas/exp/aicc/v2/asset/
+    aicc_asset_get:
+        downstream_method: GET
+        downstream_path: /api/openapi-maas/exp/aicc/v2/asset/{asset_id}
+        default_upstream_method: GET
+        default_upstream_path: /api/openapi-maas/exp/aicc/v2/asset/{asset_id}
+    aicc_asset_group_create:
+        downstream_method: POST
+        downstream_path: /api/openapi-maas/exp/aicc/v2/asset-group/
+        default_upstream_method: POST
+        default_upstream_path: /api/openapi-maas/exp/aicc/v2/asset-group/
+    aicc_asset_query:
+        downstream_method: POST
+        downstream_path: /api/openapi-maas/exp/aicc/v2/asset/query
+        default_upstream_method: POST
+        default_upstream_path: /api/openapi-maas/exp/aicc/v2/asset/query
+    aicc_real_person_asset_group_by_byted_token:
+        downstream_method: POST
+        downstream_path: /api/openapi-maas/exp/aicc/v2/real-person-auth/asset-group/by-byted-token
+        default_upstream_method: POST
+        default_upstream_path: /api/openapi-maas/exp/aicc/v2/real-person-auth/asset-group/by-byted-token
+    aicc_real_person_auth_session_create:
+        downstream_method: POST
+        downstream_path: /api/openapi-maas/exp/aicc/v2/real-person-auth/sessions
+        default_upstream_method: POST
+        default_upstream_path: /api/openapi-maas/exp/aicc/v2/real-person-auth/sessions
+    ark_asset_groups_create:
+        downstream_method: POST
+        downstream_path: /api/v3/ark/assets/groups
+        default_upstream_method: POST
+        default_upstream_path: /api/v3/ark/assets/groups
+    ark_assets_create:
+        downstream_method: POST
+        downstream_path: /api/v3/ark/assets
+        default_upstream_method: POST
+        default_upstream_path: /api/v3/ark/assets
+    ark_assets_get:
+        downstream_method: GET
+        downstream_path: /api/v3/ark/assets/{asset_id}
+        default_upstream_method: GET
+        default_upstream_path: /api/v3/ark/assets/{asset_id}
+    ark_assets_list:
+        downstream_method: GET
+        downstream_path: /api/v3/ark/assets
+        default_upstream_method: GET
+        default_upstream_path: /api/v3/ark/assets
+    ark_real_person_assets_create:
+        downstream_method: POST
+        downstream_path: /api/v3/ark/real-person/assets
+        default_upstream_method: POST
+        default_upstream_path: /api/v3/ark/real-person/assets
+    ark_real_person_assets_get:
+        downstream_method: GET
+        downstream_path: /api/v3/ark/real-person/assets/{asset_id}
+        default_upstream_method: GET
+        default_upstream_path: /api/v3/ark/real-person/assets/{asset_id}
+    ark_real_person_validate_sessions_create:
+        downstream_method: POST
+        downstream_path: /api/v3/ark/real-person/validate/sessions
+        default_upstream_method: POST
+        default_upstream_path: /api/v3/ark/real-person/validate/sessions
+    ark_real_person_validate_sessions_get:
+        downstream_method: GET
+        downstream_path: /api/v3/ark/real-person/validate/sessions/{session_id}
+        default_upstream_method: GET
+        default_upstream_path: /api/v3/ark/real-person/validate/sessions/{session_id}
+    seedance_open_create_asset:
+        downstream_method: POST
+        downstream_path: /api/v3/open/CreateAsset
+        default_upstream_method: POST
+        default_upstream_path: /api/v3/open/CreateAsset
+    seedance_open_get_asset:
+        downstream_method: POST
+        downstream_path: /api/v3/open/GetAsset
+        default_upstream_method: POST
+        default_upstream_path: /api/v3/open/GetAsset
+routes:
+    - name: wetoken-seedance-oversea
+      api_key_ids:
+        - 7
+      channel_id: 3
+      models:
+        - doubao-seedance-2-0-fast-filter-off
+        - doubao-seedance-2-0-filter-off
+        - dreamina-seedance-2-0-mini
+        - dreamina-seedance-2-0-mini-filter-off
+      upstream_base_url: https://asset.wetoken.ai
+      upstream_api_key_env: HWD_WETOKEN_API_KEY
+      asset_namespace_id: wetoken-oversea
+      enabled_actions:
+        - seedance_open_create_asset
+        - seedance_open_get_asset
+      upstream_action_overrides:
+        seedance_open_create_asset:
+            upstream_method: POST
+            upstream_path: /v3/open/CreateAsset
+        seedance_open_get_asset:
+            upstream_method: POST
+            upstream_path: /v3/open/GetAsset
+    - name: albertg-hwdrama-seedance-oversea
+      api_key_ids:
+        - 3
+        - 6
+      channel_id: 1
+      models:
+        - doubao-seedance-2-0-fast-filter-off
+        - doubao-seedance-2-0-filter-off
+        - dreamina-seedance-2-0-mini-filter-off
+      upstream_base_url: https://foxtoken.linkomobile.com
+      upstream_api_key_env: HWD_HWDRAMA_API_KEY
+      asset_namespace_id: hwdrama-oversea
+      enabled_actions:
+        - seedance_open_create_asset
+        - seedance_open_get_asset
+    - name: albertg-hwdrama-ark-assets
+      api_key_ids:
+        - 3
+        - 6
+      channel_id: 1
+      models:
+        - '*'
+      upstream_base_url: https://foxtoken.linkomobile.com
+      upstream_api_key_env: HWD_HWDRAMA_API_KEY
+      asset_namespace_id: hwdrama-oversea
+      enabled_actions:
+        - ark_asset_groups_create
+        - ark_assets_create
+        - ark_assets_get
+        - ark_assets_list
+        - ark_real_person_assets_create
+        - ark_real_person_assets_get
+        - ark_real_person_validate_sessions_create
+        - ark_real_person_validate_sessions_get
+    - name: fissionformal-hwdrama-seedance-oversea
+      api_key_ids:
+        - 15
+      channel_id: 4
+      models:
+        - doubao-seedance-2-0-fast-filter-off
+        - doubao-seedance-2-0-filter-off
+        - dreamina-seedance-2-0-mini-filter-off
+      upstream_base_url: https://foxtoken.linkomobile.com
+      upstream_api_key_env: HWD_FISSIONFORMAL_API_KEY
+      asset_namespace_id: hwdrama-oversea
+      enabled_actions:
+        - seedance_open_create_asset
+        - seedance_open_get_asset
+    - name: albertl-hwdrama8-ark-assets
+      api_key_ids:
+        - 16
+      channel_id: 5
+      models:
+        - '*'
+      upstream_base_url: http://ai.hwdrama.com
+      upstream_api_key_env: HWD_HWDRAMA8_API_KEY
+      asset_namespace_id: hwdrama8-albertl
+      enabled_actions:
+        - aicc_asset_create
+        - aicc_asset_get
+        - aicc_asset_group_create
+        - aicc_asset_query
+        - aicc_real_person_asset_group_by_byted_token
+        - aicc_real_person_auth_session_create

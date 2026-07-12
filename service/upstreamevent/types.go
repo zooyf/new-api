@@ -40,6 +40,7 @@ type CustomerContext struct {
 	TokenID           string `json:"token_id,omitempty"`
 	APIKeyFingerprint string `json:"api_key_fingerprint,omitempty"`
 	APIKeyLast4       string `json:"api_key_last4,omitempty"`
+	APIKeyRedacted    bool   `json:"api_key_redacted,omitempty"`
 	Group             string `json:"group,omitempty"`
 }
 
@@ -73,8 +74,26 @@ type PayloadHashes struct {
 	ResponseBodyHash string `json:"response_body_hash,omitempty"`
 }
 
-type bulkRequest struct {
-	Events []ProviderEvent `json:"events"`
+type tokenOperationBulkRequest struct {
+	BatchID        string                        `json:"batchId,omitempty"`
+	ProviderEvents []tokenOperationProviderEvent `json:"providerEvents"`
+}
+
+type tokenOperationProviderEvent struct {
+	IdempotencyKey   string                 `json:"idempotency_key,omitempty"`
+	SourceSystem     string                 `json:"source_system"`
+	EventID          string                 `json:"event_id"`
+	EventType        string                 `json:"event_type"`
+	OccurredAt       string                 `json:"occurred_at"`
+	RequestID        string                 `json:"request_id,omitempty"`
+	CustomerContext  CustomerContext        `json:"customer_context"`
+	RoutingContext   RoutingContext         `json:"routing_context"`
+	RequestBodyJSON  map[string]interface{} `json:"request_body_json,omitempty"`
+	ResponseBodyJSON map[string]interface{} `json:"response_body_json,omitempty"`
+	RawUsageJSON     map[string]interface{} `json:"raw_usage_json,omitempty"`
+	UsageJSON        map[string]interface{} `json:"usage_json,omitempty"`
+	PayloadHashes    PayloadHashes          `json:"payload_hashes,omitempty"`
+	ExtraJSON        map[string]interface{} `json:"extra_json,omitempty"`
 }
 
 func nowRFC3339() string {

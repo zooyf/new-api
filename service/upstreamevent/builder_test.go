@@ -59,7 +59,7 @@ func TestBuildUpstreamResponseEventIncludesContextsAndRawUsage(t *testing.T) {
 	assert.Equal(t, "default", event.CustomerContext.Group)
 	assert.Equal(t, "claude-3-5-sonnet", event.RoutingContext.ModelName)
 	assert.Equal(t, "claude-3-5-sonnet-20241022", event.RoutingContext.UpstreamModelName)
-	assert.Equal(t, "chat_completion", event.RoutingContext.CallType)
+	assert.Equal(t, "text_generation", event.RoutingContext.CallType)
 	assert.Equal(t, float64(18), event.UsageContext.UsageJSON["total_tokens"])
 	assert.Equal(t, "anthropic", event.UsageContext.RawUsageJSON["provider"])
 	assert.Equal(t, "official", event.UsageContext.ExtraJSON["usage_quality_hint"])

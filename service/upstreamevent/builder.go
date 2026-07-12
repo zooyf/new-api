@@ -266,6 +266,7 @@ func baseRelayEvent(c *gin.Context, info *relaycommon.RelayInfo, eventType strin
 		TokenID:           intString(info.TokenId),
 		APIKeyFingerprint: keyFingerprint(info.TokenKey),
 		APIKeyLast4:       keyLast4(info.TokenKey),
+		APIKeyRedacted:    info.TokenKey != "",
 		Group:             group,
 	}
 	channelType := ""
@@ -449,7 +450,7 @@ func relayModeName(mode int) string {
 func callTypeFromRelayMode(mode int) string {
 	switch mode {
 	case relayconstant.RelayModeChatCompletions, relayconstant.RelayModeCompletions, relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact, relayconstant.RelayModeGemini:
-		return "chat_completion"
+		return "text_generation"
 	case relayconstant.RelayModeEmbeddings:
 		return "embedding"
 	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:

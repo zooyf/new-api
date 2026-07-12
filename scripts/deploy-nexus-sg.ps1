@@ -774,6 +774,7 @@ location = /api/v3/contents/generations/tasks { include `$nginx_reverse_snippet;
 location ^~ /api/v3/contents/generations/tasks/ { include `$nginx_reverse_snippet; }
 location ^~ /api/v3/ark/ { include `$nginx_common_snippet; }
 location ^~ /api/v3/open/ { include `$nginx_common_snippet; }
+location ^~ /api/openapi-maas/ { include `$nginx_common_snippet; }
 EOF
     if ! sudo grep -q "hwdrama-proxy-locations.conf" "`$nginx_site"; then
         tmp_nginx="`$(mktemp)"
