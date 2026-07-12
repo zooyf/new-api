@@ -484,14 +484,6 @@ routes:
     upstream_api_key_env: HWD_HWDRAMA_API_KEY
     asset_namespace_id: hwdrama-default
     enabled_actions:
-      - ark_assets_list
-      - ark_assets_create
-      - ark_assets_get
-      - ark_asset_groups_create
-      - ark_real_person_assets_create
-      - ark_real_person_assets_get
-      - ark_real_person_validate_sessions_create
-      - ark_real_person_validate_sessions_get
       - seedance_open_create_asset
       - seedance_open_get_asset
 EOF
