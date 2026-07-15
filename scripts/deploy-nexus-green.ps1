@@ -22,6 +22,10 @@ param(
     [int]$HealthTimeoutSeconds = 180,
     [ValidateSet("Direct", "Batch")][string]$BatchUpdateMode = "Direct",
     [ValidateRange(1, 300)][int]$BatchUpdateInterval = 5,
+    [ValidateRange(1, 365)][int]$BuildCacheRetentionDays = 7,
+    [ValidatePattern('^[1-9][0-9]*(B|KB|MB|GB|TB)$')][string]$BuildCacheMaxUsedSpace = "40GB",
+    [ValidatePattern('^[1-9][0-9]*(B|KB|MB|GB|TB)$')][string]$BuildCacheReservedSpace = "20GB",
+    [switch]$SkipBuildCacheCleanup,
     [switch]$AllowDirty,
     [switch]$BuildOnRemote,
     [switch]$PreflightOnly,
@@ -43,6 +47,10 @@ $parameters = @{
     HealthTimeoutSeconds = $HealthTimeoutSeconds
     BatchUpdateMode      = $BatchUpdateMode
     BatchUpdateInterval  = $BatchUpdateInterval
+    BuildCacheRetentionDays = $BuildCacheRetentionDays
+    BuildCacheMaxUsedSpace  = $BuildCacheMaxUsedSpace
+    BuildCacheReservedSpace = $BuildCacheReservedSpace
+    SkipBuildCacheCleanup   = $SkipBuildCacheCleanup.IsPresent
     AllowDirty           = $AllowDirty.IsPresent
     BuildOnRemote        = $BuildOnRemote.IsPresent
     PreflightOnly        = $PreflightOnly.IsPresent

@@ -8,6 +8,11 @@ selects the slot marked down. It refuses to deploy while both slots receive
 traffic, or when the requested slot is active. It builds a Docker image from
 the current commit, writes that slot's Compose override, and recreates only the
 inactive container. It never changes Nginx traffic.
+
+The default image/runtime version follows the production Nexus convention:
+<nearest-git-tag>.nexus.<UTC timestamp>.g<commit>. After a successful health
+check, the script prunes expired Docker build cache and applies an LRU size cap
+while leaving images, containers, and volumes untouched.
 #>
 
 [CmdletBinding()]
@@ -27,6 +32,10 @@ param(
     [int]$HealthTimeoutSeconds = 180,
     [ValidateSet("Direct", "Batch")][string]$BatchUpdateMode = "Direct",
     [ValidateRange(1, 300)][int]$BatchUpdateInterval = 5,
+    [ValidateRange(1, 365)][int]$BuildCacheRetentionDays = 7,
+    [ValidatePattern('^[1-9][0-9]*(B|KB|MB|GB|TB)$')][string]$BuildCacheMaxUsedSpace = "40GB",
+    [ValidatePattern('^[1-9][0-9]*(B|KB|MB|GB|TB)$')][string]$BuildCacheReservedSpace = "20GB",
+    [switch]$SkipBuildCacheCleanup,
     [switch]$AllowDirty,
     [switch]$BuildOnRemote,
     [switch]$PreflightOnly,
@@ -143,10 +152,17 @@ try {
     $slotName = $targetSlot.ToLowerInvariant()
     $nodeName = "nexus-sg-new-api-$slotName"
     $batchUpdateEnabled = if ($BatchUpdateMode -eq "Batch") { "true" } else { "false" }
+    $cacheCleanupEnabled = (-not $SkipBuildCacheCleanup).ToString().ToLowerInvariant()
+    $cacheRetentionHours = $BuildCacheRetentionDays * 24
 
     if (-not $ImageTag) {
         $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
-        $ImageTag = "$slotName-$timestamp-$sha"
+        $baseVersion = Get-CommandOutput git describe --tags --abbrev=0 HEAD
+        $dirtySuffix = if ($workingTreeDirty) { ".dirty" } else { "" }
+        $ImageTag = "$baseVersion.nexus.$timestamp.g$sha$dirtySuffix"
+    }
+    if ($ImageTag -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$') {
+        throw "ImageTag must be a Docker-safe version containing only letters, digits, dots, underscores, and hyphens (maximum 128 characters)."
     }
     $image = "${ImageRepository}:${ImageTag}"
 
@@ -159,6 +175,11 @@ try {
         Write-Host "Build:  $(if ($useRemoteBuild) { 'remote Docker build from git archive' } else { 'local Docker build + upload' })"
         Write-Host "$targetSlot slot: 127.0.0.1:$targetHostPort -> container :$ContainerPort"
         Write-Host "Batch update mode: $BatchUpdateMode"
+        if ($SkipBuildCacheCleanup) {
+            Write-Host "Build cache cleanup: disabled"
+        } else {
+            Write-Host "Build cache cleanup: retain $BuildCacheRetentionDays days, cap $BuildCacheMaxUsedSpace, reserve $BuildCacheReservedSpace"
+        }
         Write-Host "Nginx traffic will NOT be changed by this script."
         $answer = Read-Host "Type $($targetSlot.ToUpperInvariant()) to continue"
         if ($answer -ne $targetSlot.ToUpperInvariant()) {
@@ -169,7 +190,7 @@ try {
     Write-Host "Running remote preflight checks..."
     Invoke-Remote "set -eu; test -d '$RemoteDir'; test -f '$RemoteDir/docker-compose.yml'; test -f '$UpstreamConf'; command -v docker >/dev/null; command -v base64 >/dev/null; docker compose version >/dev/null; docker inspect '$sourceService' >/dev/null; curl -fsS 'http://127.0.0.1:$(if ($sourceSlot -eq 'Blue') { $BlueHostPort } else { $GreenHostPort })/api/status' >/dev/null"
     if ($PreflightOnly) {
-        Write-Host "Preflight OK. Auto-selected inactive slot: $targetSlot. No deployment was performed."
+        Write-Host "Preflight OK. Auto-selected inactive slot: $targetSlot. Planned image: $image. No deployment was performed."
         return
     }
 
@@ -224,6 +245,10 @@ container_port="$ContainerPort"
 health_timeout="$HealthTimeoutSeconds"
 batch_update_enabled="$batchUpdateEnabled"
 batch_update_interval="$BatchUpdateInterval"
+cleanup_build_cache="$cacheCleanupEnabled"
+cache_retention_hours="$cacheRetentionHours"
+cache_max_used_space="$BuildCacheMaxUsedSpace"
+cache_reserved_space="$BuildCacheReservedSpace"
 
 compose_file="`$remote_dir/docker-compose.yml"
 slot_override_file="`$remote_dir/docker-compose.`$target_slot.override.yml"
@@ -353,6 +378,20 @@ while [ `$SECONDS -lt `$deadline ]; do
                 exit 1
             fi
             echo "$targetSlot slot is healthy on 127.0.0.1:`$target_host_port with batch mode $BatchUpdateMode."
+            if [ "`$cleanup_build_cache" = "true" ]; then
+                echo "Docker disk usage before build-cache cleanup:"
+                docker system df || true
+                echo "Pruning build cache older than `$cache_retention_hours hours..."
+                if ! docker builder prune --force --filter "until=`${cache_retention_hours}h"; then
+                    echo "Warning: age-based build-cache cleanup failed; deployment remains healthy." >&2
+                fi
+                echo "Applying build-cache LRU cap: max=`$cache_max_used_space, reserved=`$cache_reserved_space..."
+                if ! docker builder prune --force --max-used-space "`$cache_max_used_space" --reserved-space "`$cache_reserved_space"; then
+                    echo "Warning: size-based build-cache cleanup failed; deployment remains healthy." >&2
+                fi
+                echo "Docker disk usage after build-cache cleanup:"
+                docker system df || true
+            fi
             exit 0
         fi
     fi
