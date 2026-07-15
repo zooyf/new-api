@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
@@ -88,4 +89,20 @@ func TestTaskAdaptorIgnoresDoubaoEndpointOverrideForVolcEngine(t *testing.T) {
 	submitURL, err := adaptor.BuildRequestURL(nil)
 	require.NoError(t, err)
 	assert.Equal(t, "https://ark.example.com"+defaultSubmitPath, submitURL)
+}
+
+func TestTaskAdaptorParsesStringSeedFromCompatibleUpstream(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+	taskResult, err := adaptor.ParseTaskResult([]byte(`{
+		"id":"upstream-task",
+		"status":"succeeded",
+		"seed":"10785",
+		"content":{"video_url":"https://example.com/video.mp4"},
+		"usage":{"completion_tokens":48400,"total_tokens":48400}
+	}`))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskStatusSuccess, taskResult.Status)
+	assert.Equal(t, 48400, taskResult.TotalTokens)
+	assert.Equal(t, "https://example.com/video.mp4", taskResult.Url)
 }
