@@ -173,7 +173,7 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 	if !ok || usdPerMTokens <= 0 || bc.GroupRatio <= 0 {
 		return 0
 	}
-	return int(float64(taskResult.TotalTokens) / 1_000_000 * usdPerMTokens * common.QuotaPerUnit * bc.GroupRatio)
+	return common.QuotaRound(float64(taskResult.TotalTokens) / 1_000_000 * usdPerMTokens * common.QuotaPerUnit * bc.GroupRatio)
 }
 
 func seedanceResolution(req relaycommon.TaskSubmitReq) string {

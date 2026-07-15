@@ -53,6 +53,25 @@ func TestAdjustBillingOnCompleteAppliesGroupRatio(t *testing.T) {
 	assert.Equal(t, 1_400_000, got)
 }
 
+func TestAdjustBillingOnCompleteRoundsSupplierUsageExactly(t *testing.T) {
+	oldQuotaPerUnit := appcommon.QuotaPerUnit
+	appcommon.QuotaPerUnit = 500_000
+	t.Cleanup(func() {
+		appcommon.QuotaPerUnit = oldQuotaPerUnit
+	})
+
+	task := &model.Task{}
+	task.PrivateData.BillingContext = &model.TaskBillingContext{
+		OriginModelName: "doubao-seedance-2-0-fast-filter-off",
+		GroupRatio:      1,
+	}
+	taskResult := &relaycommon.TaskInfo{TotalTokens: 48_400}
+
+	got := (&TaskAdaptor{}).AdjustBillingOnComplete(task, taskResult)
+
+	assert.Equal(t, 135_520, got)
+}
+
 func TestAdjustBillingOnCompleteFallsBackForUnsupportedCases(t *testing.T) {
 	tests := []struct {
 		name       string
