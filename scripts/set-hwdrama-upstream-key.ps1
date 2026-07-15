@@ -92,7 +92,7 @@ function Invoke-SshInput {
         if (-not $process.Start()) {
             throw "Failed to start ssh."
         }
-        $process.StandardInput.Write($InputText)
+        $process.StandardInput.Write(($InputText -replace "`r`n", "`n"))
         $process.StandardInput.Close()
         $stdout = $process.StandardOutput.ReadToEnd()
         $stderr = $process.StandardError.ReadToEnd()
