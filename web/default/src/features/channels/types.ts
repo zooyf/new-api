@@ -101,6 +101,10 @@ export interface ChannelOtherSettings {
   allow_speed?: boolean
   claude_beta_query?: boolean
   disable_task_polling_sleep?: boolean
+  doubao_video_endpoints?: {
+    submit_path?: string
+    fetch_path?: string
+  }
   upstream_model_update_check_enabled?: boolean
   upstream_model_update_auto_sync_enabled?: boolean
   upstream_model_update_ignored_models?: string[]

@@ -294,6 +294,8 @@ const SENSITIVE_FORM_FIELDS = [
   'allow_speed',
   'claude_beta_query',
   'disable_task_polling_sleep',
+  'doubao_video_submit_path',
+  'doubao_video_fetch_path',
   'upstream_model_update_check_enabled',
   'upstream_model_update_auto_sync_enabled',
   'upstream_model_update_ignored_models',
@@ -3658,6 +3660,57 @@ export function ChannelMutateDrawer({
                                   </FormItem>
                                 )}
                               />
+
+                              {currentType === 54 && (
+                                <div className='grid gap-4 border-t pt-4 sm:col-span-2 md:grid-cols-2'>
+                                  <FormField
+                                    control={form.control}
+                                    name='doubao_video_submit_path'
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          {t('DoubaoVideo submit endpoint')}
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder='/api/v3/contents/generations/tasks'
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          {t(
+                                            'Relative upstream path used to create video tasks'
+                                          )}
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  <FormField
+                                    control={form.control}
+                                    name='doubao_video_fetch_path'
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          {t('DoubaoVideo task query endpoint')}
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder='/api/v3/contents/generations/tasks/{task_id}'
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          {t(
+                                            'Relative upstream path used to query tasks; include {task_id}'
+                                          )}
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+                              )}
                             </div>
 
                             <FormField

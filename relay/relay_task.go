@@ -28,6 +28,7 @@ type TaskSubmitResult struct {
 	TaskData       []byte
 	Platform       constant.TaskPlatform
 	Quota          int
+	Endpoint       *model.TaskEndpointSnapshot
 	//PerCallPrice   types.PriceData
 }
 
@@ -259,11 +260,17 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 	upstreamevent.EmitTaskSubmitResponse(c, info, upstreamTaskID, taskData, platform, finalQuota)
 
+	var endpoint *model.TaskEndpointSnapshot
+	if provider, ok := adaptor.(channel.TaskEndpointSnapshotProvider); ok {
+		endpoint = provider.TaskEndpointSnapshot()
+	}
+
 	return &TaskSubmitResult{
 		UpstreamTaskID: upstreamTaskID,
 		TaskData:       taskData,
 		Platform:       platform,
 		Quota:          finalQuota,
+		Endpoint:       endpoint,
 	}, nil
 }
 

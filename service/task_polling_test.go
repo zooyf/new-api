@@ -22,6 +22,8 @@ import (
 type taskPollingFetchAdaptor struct {
 	mu           sync.Mutex
 	taskIDs      []string
+	baseURLs     []string
+	fetchPaths   []string
 	fetched      chan string
 	blockTaskID  string
 	blockStarted chan struct{}
@@ -32,6 +34,18 @@ type taskPollingFetchAdaptor struct {
 func (a *taskPollingFetchAdaptor) Init(_ *relaycommon.RelayInfo) {}
 
 func (a *taskPollingFetchAdaptor) FetchTask(_ string, _ string, body map[string]any, _ string) (*http.Response, error) {
+	return a.fetch(body)
+}
+
+func (a *taskPollingFetchAdaptor) FetchTaskAt(baseURL string, _ string, fetchPath string, body map[string]any, _ string) (*http.Response, error) {
+	a.mu.Lock()
+	a.baseURLs = append(a.baseURLs, baseURL)
+	a.fetchPaths = append(a.fetchPaths, fetchPath)
+	a.mu.Unlock()
+	return a.fetch(body)
+}
+
+func (a *taskPollingFetchAdaptor) fetch(body map[string]any) (*http.Response, error) {
 	taskID, _ := body["task_id"].(string)
 	if taskID == a.blockTaskID && a.releaseBlock != nil {
 		a.blockOnce.Do(func() {
@@ -88,6 +102,12 @@ func (a *taskPollingFetchAdaptor) fetchedTaskIDs() []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return append([]string(nil), a.taskIDs...)
+}
+
+func (a *taskPollingFetchAdaptor) fetchedEndpoints() ([]string, []string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]string(nil), a.baseURLs...), append([]string(nil), a.fetchPaths...)
 }
 
 func seedTaskPollingChannel(t *testing.T, id int, disableSleep bool) {
@@ -183,6 +203,35 @@ func TestUpdateVideoTasksCanSkipPollingSleepPerChannel(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, adaptor.fetchCount())
+}
+
+func TestUpdateVideoTasksUsesTaskEndpointSnapshot(t *testing.T) {
+	truncate(t)
+
+	const channelID = 103
+	seedTaskPollingChannel(t, channelID, true)
+	task := seedPollingTask(t, channelID, "task_public_snapshot", "upstream_snapshot")
+	task.PrivateData.Endpoint = &model.TaskEndpointSnapshot{
+		BaseURL:   "https://snapshot.example.com",
+		FetchPath: "/v1/seedance/video/generations/{task_id}",
+	}
+	require.NoError(t, model.DB.Model(task).Update("private_data", task.PrivateData).Error)
+
+	adaptor := &taskPollingFetchAdaptor{}
+	previousFactory := GetTaskAdaptorFunc
+	GetTaskAdaptorFunc = func(constant.TaskPlatform) TaskPollingAdaptor { return adaptor }
+	t.Cleanup(func() { GetTaskAdaptorFunc = previousFactory })
+
+	err := UpdateVideoTasks(context.Background(), constant.TaskPlatform("kling"), map[int][]string{
+		channelID: {task.GetUpstreamTaskID()},
+	}, map[string]*model.Task{
+		task.GetUpstreamTaskID(): task,
+	})
+	require.NoError(t, err)
+
+	baseURLs, fetchPaths := adaptor.fetchedEndpoints()
+	assert.Equal(t, []string{"https://snapshot.example.com"}, baseURLs)
+	assert.Equal(t, []string{"/v1/seedance/video/generations/{task_id}"}, fetchPaths)
 }
 
 func TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels(t *testing.T) {

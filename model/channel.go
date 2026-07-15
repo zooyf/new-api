@@ -962,6 +962,11 @@ func (channel *Channel) ValidateSettings() error {
 			return err
 		}
 	}
+	if channelOtherSettings.DoubaoVideoEndpoints != nil {
+		if err := channelOtherSettings.DoubaoVideoEndpoints.Validate(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

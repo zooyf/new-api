@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -108,12 +109,18 @@ type TaskAdaptor struct {
 	ChannelType int
 	apiKey      string
 	baseURL     string
+	submitPath  string
+	fetchPath   string
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.ChannelType = info.ChannelType
 	a.baseURL = info.ChannelBaseUrl
 	a.apiKey = info.ApiKey
+	a.submitPath, a.fetchPath = resolveEndpointPaths(dto.ChannelOtherSettings{})
+	if info.ChannelType == constant.ChannelTypeDoubaoVideo {
+		a.submitPath, a.fetchPath = resolveEndpointPaths(info.ChannelOtherSettings)
+	}
 }
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
@@ -124,7 +131,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 // BuildRequestURL constructs the upstream URL.
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
-	return fmt.Sprintf("%s/api/v3/contents/generations/tasks", a.baseURL), nil
+	return buildUpstreamURL(a.baseURL, a.submitPath)
 }
 
 // BuildRequestHeader sets required headers.
@@ -271,12 +278,22 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 
 // FetchTask fetch task status
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
+	return a.FetchTaskAt(baseUrl, key, a.fetchPath, body, proxy)
+}
+
+func (a *TaskAdaptor) FetchTaskAt(baseUrl, key, fetchPath string, body map[string]any, proxy string) (*http.Response, error) {
 	taskID, ok := body["task_id"].(string)
-	if !ok {
+	if !ok || strings.TrimSpace(taskID) == "" {
 		return nil, fmt.Errorf("invalid task_id")
 	}
-
-	uri := fmt.Sprintf("%s/api/v3/contents/generations/tasks/%s", baseUrl, taskID)
+	if strings.Count(fetchPath, "{task_id}") != 1 {
+		return nil, fmt.Errorf("task fetch endpoint must contain exactly one {task_id} placeholder")
+	}
+	resolvedPath := strings.Replace(fetchPath, "{task_id}", url.PathEscape(taskID), 1)
+	uri, err := buildUpstreamURL(baseUrl, resolvedPath)
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
@@ -292,6 +309,13 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		return nil, fmt.Errorf("new proxy http client failed: %w", err)
 	}
 	return client.Do(req)
+}
+
+func (a *TaskAdaptor) TaskEndpointSnapshot() *model.TaskEndpointSnapshot {
+	return &model.TaskEndpointSnapshot{
+		BaseURL:   a.baseURL,
+		FetchPath: a.fetchPath,
+	}
 }
 
 func (a *TaskAdaptor) GetModelList() []string {

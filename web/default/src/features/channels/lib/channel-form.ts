@@ -32,6 +32,20 @@ import {
   validateAdvancedCustomConfig,
 } from './advanced-custom'
 
+const DEFAULT_DOUBAO_VIDEO_SUBMIT_PATH = '/api/v3/contents/generations/tasks'
+const DEFAULT_DOUBAO_VIDEO_FETCH_PATH =
+  '/api/v3/contents/generations/tasks/{task_id}'
+
+function isValidRelativeEndpointPath(value: string): boolean {
+  const path = value.trim()
+  return (
+    path.startsWith('/') &&
+    !path.includes('://') &&
+    !path.includes('?') &&
+    !path.includes('#')
+  )
+}
+
 // ============================================================================
 // Form Validation Schema
 // ============================================================================
@@ -205,6 +219,8 @@ export const channelFormSchema = z
     allow_speed: z.boolean().optional(), // Anthropic: speed mode control
     claude_beta_query: z.boolean().optional(), // Anthropic: beta query passthrough
     disable_task_polling_sleep: z.boolean().optional(),
+    doubao_video_submit_path: z.string().optional(),
+    doubao_video_fetch_path: z.string().optional(),
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
@@ -217,6 +233,40 @@ export const channelFormSchema = z
         'base_url',
         'Base URL is required for this channel type'
       )
+    }
+
+    if (data.type === 54) {
+      const submitPath = String(data.doubao_video_submit_path || '').trim()
+      if (!isValidRelativeEndpointPath(submitPath)) {
+        addRequiredIssue(
+          ctx,
+          'doubao_video_submit_path',
+          'Endpoint must be a relative path beginning with /'
+        )
+      }
+      if (submitPath.includes('{task_id}')) {
+        addRequiredIssue(
+          ctx,
+          'doubao_video_submit_path',
+          'Submit endpoint must not contain {task_id}'
+        )
+      }
+
+      const fetchPath = String(data.doubao_video_fetch_path || '').trim()
+      if (!isValidRelativeEndpointPath(fetchPath)) {
+        addRequiredIssue(
+          ctx,
+          'doubao_video_fetch_path',
+          'Endpoint must be a relative path beginning with /'
+        )
+      }
+      if (fetchPath.split('{task_id}').length - 1 !== 1) {
+        addRequiredIssue(
+          ctx,
+          'doubao_video_fetch_path',
+          'Task query endpoint must contain exactly one {task_id}'
+        )
+      }
     }
 
     if (data.type === CHANNEL_TYPE_ADVANCED_CUSTOM) {
@@ -345,6 +395,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   allow_speed: false,
   claude_beta_query: false,
   disable_task_polling_sleep: false,
+  doubao_video_submit_path: DEFAULT_DOUBAO_VIDEO_SUBMIT_PATH,
+  doubao_video_fetch_path: DEFAULT_DOUBAO_VIDEO_FETCH_PATH,
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
@@ -401,6 +453,8 @@ export function transformChannelToFormDefaults(
   let allowSpeed = false
   let claudeBetaQuery = false
   let disableTaskPollingSleep = false
+  let doubaoVideoSubmitPath = DEFAULT_DOUBAO_VIDEO_SUBMIT_PATH
+  let doubaoVideoFetchPath = DEFAULT_DOUBAO_VIDEO_FETCH_PATH
   let upstreamModelUpdateCheckEnabled = false
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
@@ -421,6 +475,12 @@ export function transformChannelToFormDefaults(
       allowSpeed = parsed.allow_speed === true
       claudeBetaQuery = parsed.claude_beta_query === true
       disableTaskPollingSleep = parsed.disable_task_polling_sleep === true
+      doubaoVideoSubmitPath =
+        parsed.doubao_video_endpoints?.submit_path ||
+        DEFAULT_DOUBAO_VIDEO_SUBMIT_PATH
+      doubaoVideoFetchPath =
+        parsed.doubao_video_endpoints?.fetch_path ||
+        DEFAULT_DOUBAO_VIDEO_FETCH_PATH
       upstreamModelUpdateCheckEnabled =
         parsed.upstream_model_update_check_enabled === true
       upstreamModelUpdateAutoSyncEnabled =
@@ -479,6 +539,8 @@ export function transformChannelToFormDefaults(
     allow_speed: allowSpeed,
     claude_beta_query: claudeBetaQuery,
     disable_task_polling_sleep: disableTaskPollingSleep,
+    doubao_video_submit_path: doubaoVideoSubmitPath,
+    doubao_video_fetch_path: doubaoVideoFetchPath,
     allow_safety_identifier: allowSafetyIdentifier,
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
@@ -564,12 +626,15 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.allow_inference_geo = formData.allow_inference_geo === true
   } else {
     if ('disable_store' in settingsObj) delete settingsObj.disable_store
-    if ('allow_safety_identifier' in settingsObj)
+    if ('allow_safety_identifier' in settingsObj) {
       delete settingsObj.allow_safety_identifier
-    if ('allow_include_obfuscation' in settingsObj)
+    }
+    if ('allow_include_obfuscation' in settingsObj) {
       delete settingsObj.allow_include_obfuscation
-    if (formData.type !== 14 && 'allow_inference_geo' in settingsObj)
+    }
+    if (formData.type !== 14 && 'allow_inference_geo' in settingsObj) {
       delete settingsObj.allow_inference_geo
+    }
   }
 
   // Anthropic (type 14): claude_beta_query, allow_inference_geo, allow_speed
@@ -585,6 +650,15 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
   settingsObj.disable_task_polling_sleep =
     formData.disable_task_polling_sleep === true
 
+  if (formData.type === 54) {
+    settingsObj.doubao_video_endpoints = {
+      submit_path: String(formData.doubao_video_submit_path || '').trim(),
+      fetch_path: String(formData.doubao_video_fetch_path || '').trim(),
+    }
+  } else if ('doubao_video_endpoints' in settingsObj) {
+    delete settingsObj.doubao_video_endpoints
+  }
+
   // Upstream model update settings (for model-fetchable channel types)
   if (MODEL_FETCHABLE_TYPES.has(formData.type)) {
     settingsObj.upstream_model_update_check_enabled =
@@ -592,14 +666,14 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.upstream_model_update_auto_sync_enabled =
       settingsObj.upstream_model_update_check_enabled === true &&
       formData.upstream_model_update_auto_sync_enabled === true
-    settingsObj.upstream_model_update_ignored_models = Array.from(
-      new Set(
+    settingsObj.upstream_model_update_ignored_models = [
+      ...new Set(
         String(formData.upstream_model_update_ignored_models || '')
           .split(',')
           .map((model) => model.trim())
           .filter(Boolean)
-      )
-    )
+      ),
+    ]
     if (
       !Array.isArray(settingsObj.upstream_model_update_last_detected_models) ||
       settingsObj.upstream_model_update_check_enabled !== true

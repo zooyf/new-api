@@ -34,6 +34,10 @@ type TaskPollingAdaptor interface {
 	AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int
 }
 
+type taskEndpointFetcher interface {
+	FetchTaskAt(baseURL string, key string, fetchPath string, body map[string]any, proxy string) (*http.Response, error)
+}
+
 // GetTaskAdaptorFunc 由 main 包注入，用于获取指定平台的任务适配器。
 // 打破 service -> relay -> relay/channel -> service 的循环依赖。
 var GetTaskAdaptorFunc func(platform constant.TaskPlatform) TaskPollingAdaptor
@@ -401,13 +405,18 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 	if adaptor == nil {
 		return fmt.Errorf("video adaptor not found")
 	}
+	otherSettings := cacheGetChannel.GetOtherSettings()
 	info := &relaycommon.RelayInfo{}
 	info.ChannelMeta = &relaycommon.ChannelMeta{
-		ChannelBaseUrl: cacheGetChannel.GetBaseURL(),
+		ChannelType:          cacheGetChannel.Type,
+		ChannelId:            cacheGetChannel.Id,
+		ChannelBaseUrl:       cacheGetChannel.GetBaseURL(),
+		ApiKey:               cacheGetChannel.Key,
+		ChannelSetting:       cacheGetChannel.GetSetting(),
+		ChannelOtherSettings: otherSettings,
 	}
-	info.ApiKey = cacheGetChannel.Key
 	adaptor.Init(info)
-	disablePollingSleep := cacheGetChannel.GetOtherSettings().DisableTaskPollingSleep
+	disablePollingSleep := otherSettings.DisableTaskPollingSleep
 	for i, taskId := range taskIds {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -450,10 +459,24 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if privateData.Key != "" {
 		key = privateData.Key
 	}
-	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
+	fetchBody := map[string]any{
 		"task_id": task.GetUpstreamTaskID(),
 		"action":  task.Action,
-	}, proxy)
+	}
+	var resp *http.Response
+	var err error
+	if endpoint := task.PrivateData.Endpoint; endpoint != nil && endpoint.FetchPath != "" {
+		if endpoint.BaseURL != "" {
+			baseURL = endpoint.BaseURL
+		}
+		if fetcher, ok := adaptor.(taskEndpointFetcher); ok {
+			resp, err = fetcher.FetchTaskAt(baseURL, key, endpoint.FetchPath, fetchBody, proxy)
+		} else {
+			resp, err = adaptor.FetchTask(baseURL, key, fetchBody, proxy)
+		}
+	} else {
+		resp, err = adaptor.FetchTask(baseURL, key, fetchBody, proxy)
+	}
 	if err != nil {
 		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)
 	}

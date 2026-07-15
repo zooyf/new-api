@@ -9,6 +9,58 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDoubaoVideoEndpointSettingsValidate(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings *DoubaoVideoEndpointSettings
+		wantErr  bool
+	}{
+		{
+			name: "custom endpoints",
+			settings: &DoubaoVideoEndpointSettings{
+				SubmitPath: "/v1/seedance/video/generations",
+				FetchPath:  "/v1/seedance/video/generations/{task_id}",
+			},
+		},
+		{name: "empty uses defaults", settings: &DoubaoVideoEndpointSettings{}},
+		{
+			name: "absolute submit URL",
+			settings: &DoubaoVideoEndpointSettings{
+				SubmitPath: "https://example.com/v1/video",
+				FetchPath:  "/v1/video/{task_id}",
+			},
+			wantErr: true,
+		},
+		{
+			name: "fetch without placeholder",
+			settings: &DoubaoVideoEndpointSettings{
+				SubmitPath: "/v1/video",
+				FetchPath:  "/v1/video/task",
+			},
+			wantErr: true,
+		},
+		{
+			name: "fetch with query",
+			settings: &DoubaoVideoEndpointSettings{
+				SubmitPath: "/v1/video",
+				FetchPath:  "/v1/video/{task_id}?detail=true",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.settings.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestAdvancedCustomValidateResponsesToChatConverterPath(t *testing.T) {
 	valid := &AdvancedCustomConfig{
 		Routes: []AdvancedCustomRoute{
