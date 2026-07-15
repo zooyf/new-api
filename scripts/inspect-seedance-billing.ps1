@@ -110,7 +110,7 @@ $calculatedQuota = $null
 $calculatedUsd = $null
 if ($basePrices.ContainsKey($modelName) -and $totalTokens -gt 0 -and $groupRatio -gt 0) {
     $unitPrice = [math]::Round([double]$basePrices[$modelName] * $videoInputRatio, 10)
-    $calculatedQuota = [long][math]::Truncate(
+    $calculatedQuota = [long][math]::Round(
         ([double]$totalTokens / 1000000.0) * $unitPrice * $quotaPerUnit * $groupRatio
     )
     $calculatedUsd = [double]$calculatedQuota / $quotaPerUnit
@@ -194,7 +194,7 @@ Write-Output "Usage:             $($result.total_tokens) tokens"
 
 if ($null -ne $unitPrice) {
     Write-Output "Unit price:        $unitPrice USD / 1M tokens"
-    Write-Output "Formula:           int($totalTokens / 1000000 * $unitPrice * $([long]$quotaPerUnit) * $groupRatio)"
+    Write-Output "Formula:           round($totalTokens / 1000000 * $unitPrice * $([long]$quotaPerUnit) * $groupRatio)"
     Write-Output "Calculated quota:  $calculatedQuota"
 } else {
     Write-Output "Formula:           unavailable (unsupported model or missing billing evidence)"
