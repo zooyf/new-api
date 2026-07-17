@@ -24,11 +24,12 @@ import (
 )
 
 type TaskSubmitResult struct {
-	UpstreamTaskID string
-	TaskData       []byte
-	Platform       constant.TaskPlatform
-	Quota          int
-	Endpoint       *model.TaskEndpointSnapshot
+	UpstreamTaskID  string
+	TaskData        []byte
+	Platform        constant.TaskPlatform
+	Quota           int
+	Endpoint        *model.TaskEndpointSnapshot
+	ProviderBilling *model.TaskProviderBillingSnapshot
 	//PerCallPrice   types.PriceData
 }
 
@@ -181,11 +182,25 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	// 4. 价格计算：基础模型价格
 	info.OriginModelName = modelName
-	priceData, err := helper.ModelPriceHelperPerCall(c, info)
-	if err != nil {
-		return nil, service.TaskErrorWrapper(err, "model_price_error", http.StatusBadRequest)
+	var providerBilling *model.TaskProviderBillingSnapshot
+	if estimator, ok := adaptor.(channel.TaskBillingEstimator); ok {
+		info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+		estimate, taskErr := estimator.EstimateTaskBilling(c, info)
+		if taskErr != nil {
+			return nil, taskErr
+		}
+		if estimate == nil {
+			return nil, service.TaskErrorWrapperLocal(errors.New("provider billing estimate is empty"), "model_price_error", http.StatusInternalServerError)
+		}
+		info.PriceData = estimate.PriceData
+		providerBilling = estimate.Snapshot
+	} else {
+		priceData, err := helper.ModelPriceHelperPerCall(c, info)
+		if err != nil {
+			return nil, service.TaskErrorWrapper(err, "model_price_error", http.StatusBadRequest)
+		}
+		info.PriceData = priceData
 	}
-	info.PriceData = priceData
 
 	// 5. 计费估算：让适配器根据用户请求提供 OtherRatios（时长、分辨率等）
 	//    必须在 ModelPriceHelperPerCall 之后调用（它会重建 PriceData）。
@@ -266,11 +281,12 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 
 	return &TaskSubmitResult{
-		UpstreamTaskID: upstreamTaskID,
-		TaskData:       taskData,
-		Platform:       platform,
-		Quota:          finalQuota,
-		Endpoint:       endpoint,
+		UpstreamTaskID:  upstreamTaskID,
+		TaskData:        taskData,
+		Platform:        platform,
+		Quota:           finalQuota,
+		Endpoint:        endpoint,
+		ProviderBilling: providerBilling,
 	}, nil
 }
 

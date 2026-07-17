@@ -20,12 +20,14 @@ type compiledAction struct {
 }
 
 type compiledRoute struct {
-	name             string
-	channelID        int
-	upstreamBaseURL  *url.URL
-	upstreamAPIKey   string
-	assetNamespaceID string
-	actions          map[string]compiledRouteAction
+	name               string
+	channelID          int
+	upstreamBaseURL    *url.URL
+	upstreamAPIKey     string
+	upstreamAuthHeader string
+	upstreamAuthPrefix string
+	assetNamespaceID   string
+	actions            map[string]compiledRouteAction
 }
 
 type compiledRouteAction struct {
@@ -46,13 +48,15 @@ type ActionMatch struct {
 }
 
 type RouteMatch struct {
-	RouteName        string
-	ChannelID        int
-	UpstreamBaseURL  *url.URL
-	UpstreamAPIKey   string
-	UpstreamMethod   string
-	UpstreamPath     string
-	AssetNamespaceID string
+	RouteName          string
+	ChannelID          int
+	UpstreamBaseURL    *url.URL
+	UpstreamAPIKey     string
+	UpstreamMethod     string
+	UpstreamPath       string
+	AssetNamespaceID   string
+	UpstreamAuthHeader string
+	UpstreamAuthPrefix string
 }
 
 func BuildRuntimeRouter(config *RoutesConfig, secretLookup func(string) string) (*RuntimeRouter, error) {
@@ -115,12 +119,14 @@ func BuildRuntimeRouter(config *RoutesConfig, secretLookup func(string) string) 
 			}
 		}
 		compiled := compiledRoute{
-			name:             route.Name,
-			channelID:        route.ChannelID,
-			upstreamBaseURL:  baseURL,
-			upstreamAPIKey:   upstreamAPIKey,
-			assetNamespaceID: route.AssetNamespaceID,
-			actions:          routeActions,
+			name:               route.Name,
+			channelID:          route.ChannelID,
+			upstreamBaseURL:    baseURL,
+			upstreamAPIKey:     upstreamAPIKey,
+			upstreamAuthHeader: route.UpstreamAuthHeader,
+			upstreamAuthPrefix: route.UpstreamAuthPrefix,
+			assetNamespaceID:   route.AssetNamespaceID,
+			actions:            routeActions,
 		}
 		for _, apiKeyID := range routeAPIKeyIDs(route) {
 			for _, model := range route.Models {
@@ -210,13 +216,15 @@ func (router *RuntimeRouter) Match(apiKeyID int, model string, action ActionMatc
 	}
 	baseURL := *matched.upstreamBaseURL
 	return RouteMatch{
-		RouteName:        matched.name,
-		ChannelID:        matched.channelID,
-		UpstreamBaseURL:  &baseURL,
-		UpstreamAPIKey:   matched.upstreamAPIKey,
-		UpstreamMethod:   routeAction.method,
-		UpstreamPath:     upstreamPath,
-		AssetNamespaceID: matched.assetNamespaceID,
+		RouteName:          matched.name,
+		ChannelID:          matched.channelID,
+		UpstreamBaseURL:    &baseURL,
+		UpstreamAPIKey:     matched.upstreamAPIKey,
+		UpstreamMethod:     routeAction.method,
+		UpstreamPath:       upstreamPath,
+		AssetNamespaceID:   matched.assetNamespaceID,
+		UpstreamAuthHeader: matched.upstreamAuthHeader,
+		UpstreamAuthPrefix: matched.upstreamAuthPrefix,
 	}, true, nil
 }
 

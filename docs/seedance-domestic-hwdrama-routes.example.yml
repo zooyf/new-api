@@ -1,0 +1,55 @@
+version: 1
+
+actions:
+  seedance_domestic_create_visual_validate_session:
+    downstream_method: POST
+    downstream_path: /api/v3/open/CreateVisualValidateSession
+    default_upstream_method: POST
+    default_upstream_path: /asset/SdToolApi/CreateVisualValidateSession
+
+  seedance_domestic_get_visual_validate_result:
+    downstream_method: POST
+    downstream_path: /api/v3/open/GetVisualValidateResult
+    default_upstream_method: POST
+    default_upstream_path: /asset/SdToolApi/GetVisualValidateResult
+
+  seedance_domestic_create_asset_group:
+    downstream_method: POST
+    downstream_path: /api/v3/open/CreateAssetGroup
+    default_upstream_method: POST
+    default_upstream_path: /asset/SdToolApi/CreateAssetGroup
+
+  seedance_domestic_create_asset:
+    downstream_method: POST
+    downstream_path: /api/v3/open/CreateAsset
+    default_upstream_method: POST
+    default_upstream_path: /asset/SdToolApi/CreateAsset
+    # Production E2E returns the asset identifier in the data.Id field.
+    affinity_response_field: data.Id
+
+  seedance_domestic_get_asset:
+    downstream_method: POST
+    downstream_path: /api/v3/open/GetAsset
+    default_upstream_method: POST
+    default_upstream_path: /asset/SdToolApi/GetAsset
+
+routes:
+  - name: seedance-domestic-assets
+    # Replace with the new-api token ID(s) allowed to call the five public routes.
+    api_key_ids:
+      - 10001
+    # Replace with the database ID of the type 59 channel, not the channel type number.
+    channel_id: 123
+    models:
+      - "*"
+    upstream_base_url: https://api.laomandi.com
+    upstream_api_key_env: SEEDANCE_DOMESTIC_LMD_KEY
+    upstream_auth_header: lmd-key
+    upstream_auth_prefix: ""
+    asset_namespace_id: seedance-domestic
+    enabled_actions:
+      - seedance_domestic_create_visual_validate_session
+      - seedance_domestic_get_visual_validate_result
+      - seedance_domestic_create_asset_group
+      - seedance_domestic_create_asset
+      - seedance_domestic_get_asset

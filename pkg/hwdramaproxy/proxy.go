@@ -13,7 +13,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"gorm.io/gorm"
+	"github.com/tidwall/gjson"
 )
 
 type TokenLookup func(key string) (bool, error)
@@ -139,7 +139,14 @@ func (p *Proxy) serveLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.proxyRequest(w, r, r.Method, p.upstream, r.URL.Path, p.upstreamAPIKey)
+	p.proxyRequest(w, r, RouteMatch{
+		UpstreamBaseURL:    p.upstream,
+		UpstreamAPIKey:     p.upstreamAPIKey,
+		UpstreamMethod:     r.Method,
+		UpstreamPath:       r.URL.Path,
+		UpstreamAuthHeader: "Authorization",
+		UpstreamAuthPrefix: "Bearer",
+	}, token.ID, "")
 }
 
 func (p *Proxy) serveDynamic(w http.ResponseWriter, r *http.Request) {
@@ -193,13 +200,13 @@ func (p *Proxy) serveDynamic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.proxyRequest(w, r, route.UpstreamMethod, route.UpstreamBaseURL, route.UpstreamPath, route.UpstreamAPIKey)
+	p.proxyRequest(w, r, route, token.ID, action.Config.AffinityResponseField)
 }
 
-func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, method string, upstream *url.URL, upstreamPath string, upstreamAPIKey string) {
+func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, route RouteMatch, tokenID int, affinityResponseField string) {
 	upstreamURL := *r.URL
-	rewriteRequestURL(&upstreamURL, upstream, upstreamPath)
-	req, err := http.NewRequestWithContext(r.Context(), method, upstreamURL.String(), r.Body)
+	rewriteRequestURL(&upstreamURL, route.UpstreamBaseURL, route.UpstreamPath)
+	req, err := http.NewRequestWithContext(r.Context(), route.UpstreamMethod, upstreamURL.String(), r.Body)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "upstream_error", "failed to build upstream request")
 		return
@@ -207,8 +214,18 @@ func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, method stri
 	req.Header = r.Header.Clone()
 	req.ContentLength = r.ContentLength
 	removeHopByHopHeaders(req.Header)
-	req.Host = upstream.Host
-	req.Header.Set("Authorization", "Bearer "+upstreamAPIKey)
+	req.Host = route.UpstreamBaseURL.Host
+	req.Header.Del("Authorization")
+	authHeader := strings.TrimSpace(route.UpstreamAuthHeader)
+	if authHeader == "" {
+		authHeader = "Authorization"
+	}
+	req.Header.Del(authHeader)
+	authValue := route.UpstreamAPIKey
+	if prefix := strings.TrimSpace(route.UpstreamAuthPrefix); prefix != "" {
+		authValue = prefix + " " + authValue
+	}
+	req.Header.Set(authHeader, authValue)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -217,10 +234,38 @@ func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, method stri
 	}
 	defer resp.Body.Close()
 
+	if affinityResponseField == "" {
+		copyHeader(w.Header(), resp.Header)
+		removeHopByHopHeaders(w.Header())
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+		return
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "upstream_error", "failed to read upstream response")
+		return
+	}
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		externalID := strings.TrimSpace(gjson.GetBytes(body, affinityResponseField).String())
+		if externalID == "" {
+			if upstreamCode, upstreamMessage, ok := parseUpstreamBusinessError(body); ok {
+				writeJSONError(w, http.StatusBadRequest, upstreamCode, upstreamMessage)
+				return
+			}
+			writeJSONError(w, http.StatusBadGateway, "upstream_error", "upstream response did not contain the configured asset identifier")
+			return
+		}
+		if err := model.UpsertAssetChannelBinding(externalID, route.AssetNamespaceID, route.ChannelID, tokenID); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "database_error", "failed to persist asset channel affinity")
+			return
+		}
+		w.Header().Set("X-New-Api-Asset-Namespace", route.AssetNamespaceID)
+	}
 	copyHeader(w.Header(), resp.Header)
 	removeHopByHopHeaders(w.Header())
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	_, _ = w.Write(body)
 }
 
 func (p *Proxy) ReloadRoutes() error {
@@ -277,6 +322,9 @@ func RouteDecisionFor(method string, path string) RouteDecision {
 		"/api/v3/ark/real-person/validate/sessions": {"POST": true},
 		"/api/v3/open/CreateAsset":                  {"POST": true},
 		"/api/v3/open/GetAsset":                     {"POST": true},
+		"/api/v3/open/CreateVisualValidateSession":  {"POST": true},
+		"/api/v3/open/GetVisualValidateResult":      {"POST": true},
+		"/api/v3/open/CreateAssetGroup":             {"POST": true},
 	}
 	if methods, ok := exactRoutes[path]; ok {
 		return RouteDecision{
@@ -319,14 +367,23 @@ func NormalizeAPIKey(authHeader string) (string, bool) {
 }
 
 func ResolveTokenInDatabase(key string) (*TokenIdentity, error) {
-	token, err := model.GetTokenByKey(key, true)
-	if err == nil {
-		return &TokenIdentity{ID: token.Id}, nil
+	token, err := model.ValidateUserToken(key)
+	if err != nil {
+		if errors.Is(err, model.ErrTokenInvalid) || errors.Is(err, model.ErrTokenNotProvided) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+
+	user, err := model.GetUserCache(token.UserId)
+	if err != nil {
+		return nil, err
+	}
+	if user.Status != common.UserStatusEnabled {
 		return nil, nil
 	}
-	return nil, err
+
+	return &TokenIdentity{ID: token.Id}, nil
 }
 
 func TokenExistsInDatabase(key string) (bool, error) {
@@ -403,6 +460,34 @@ type proxyErrorResponse struct {
 type proxyError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+func parseUpstreamBusinessError(body []byte) (string, string, bool) {
+	codeResult := gjson.GetBytes(body, "data.Code")
+	if codeResult.Type != gjson.String {
+		return "", "", false
+	}
+	code := strings.TrimSpace(codeResult.Str)
+	if code == "" {
+		return "", "", false
+	}
+	codeRunes := []rune(code)
+	if len(codeRunes) > 128 {
+		code = string(codeRunes[:128])
+	}
+
+	message := "upstream rejected the request"
+	messageResult := gjson.GetBytes(body, "data.Message")
+	if messageResult.Type == gjson.String {
+		if upstreamMessage := strings.TrimSpace(messageResult.Str); upstreamMessage != "" {
+			messageRunes := []rune(upstreamMessage)
+			if len(messageRunes) > 2048 {
+				upstreamMessage = string(messageRunes[:2048])
+			}
+			message = upstreamMessage
+		}
+	}
+	return code, message, true
 }
 
 func writeJSONError(w http.ResponseWriter, status int, code string, message string) {

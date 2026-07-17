@@ -156,6 +156,7 @@ import {
   type ChannelFormValues,
   deduplicateKeys,
   getChannelTypeIcon,
+  getDefaultBaseUrl,
   getKeyPromptForType,
   parseModelsString,
   formatModelsArray,
@@ -1971,6 +1972,22 @@ export function ChannelMutateDrawer({
                                             nextType > 0
                                           ) {
                                             field.onChange(nextType)
+                                            if (nextType === 59) {
+                                              if (!form.getValues('base_url')) {
+                                                form.setValue(
+                                                  'base_url',
+                                                  getDefaultBaseUrl(nextType),
+                                                  { shouldDirty: true }
+                                                )
+                                              }
+                                              if (!form.getValues('models')) {
+                                                form.setValue(
+                                                  'models',
+                                                  'doubao-seedance-2-0-260128',
+                                                  { shouldDirty: true }
+                                                )
+                                              }
+                                            }
                                           }
                                         }}
                                         placeholder={t('Select channel type')}

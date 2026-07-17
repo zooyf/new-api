@@ -592,12 +592,20 @@ func RelayTask(c *gin.Context) {
 			OtherRatios:     relayInfo.PriceData.OtherRatios(),
 			OriginModelName: relayInfo.OriginModelName,
 			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+			ProviderBilling: result.ProviderBilling,
 		}
 		task.Quota = result.Quota
 		task.Data = result.TaskData
 		task.Action = relayInfo.Action
+		if result.ProviderBilling != nil && result.ProviderBilling.AsyncReconciliationRequired {
+			task.BillingReconciliationPending = true
+		}
 		if insertErr := task.Insert(); insertErr != nil {
 			common.SysError("insert task error: " + insertErr.Error())
+		} else if task.BillingReconciliationPending {
+			if enqueueErr := model.EnqueueTaskBillingReconciliation(task, result.ProviderBilling.Provider); enqueueErr != nil {
+				common.SysError("enqueue task billing reconciliation error: " + enqueueErr.Error())
+			}
 		}
 	}
 

@@ -134,6 +134,7 @@ func runActionAdd(args []string) error {
 	path := fs.String("path", "", "downstream path")
 	upstreamMethod := fs.String("upstream-method", "", "default upstream method")
 	upstreamPath := fs.String("upstream-path", "", "default upstream path")
+	affinityResponseField := fs.String("affinity-response-field", "", "JSON field containing an asset ID to bind to this route")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -162,6 +163,7 @@ func runActionAdd(args []string) error {
 		DownstreamPath:        *path,
 		DefaultUpstreamMethod: *upstreamMethod,
 		DefaultUpstreamPath:   *upstreamPath,
+		AffinityResponseField: *affinityResponseField,
 	}
 	if err := writeValidatedConfig(*configPath, "", config); err != nil {
 		return err
@@ -217,6 +219,8 @@ func runConfigWizard(args []string) error {
 	models := promptStringList(reader, "Models (comma-separated, or *)", modelsDefault)
 	upstreamBaseURL := promptString(reader, "Upstream base URL", channel.GetBaseURL())
 	upstreamAPIKeyEnv := promptString(reader, "Upstream API key env", "HWD_"+strings.ToUpper(sanitizeEnvName(routeName))+"_API_KEY")
+	upstreamAuthHeader := promptString(reader, "Upstream auth header", "Authorization")
+	upstreamAuthPrefix := promptString(reader, "Upstream auth prefix (empty for a raw key)", map[bool]string{true: "Bearer", false: ""}[strings.EqualFold(upstreamAuthHeader, "Authorization")])
 	assetNamespaceID := promptString(reader, "Asset namespace ID", slug(channel.Name))
 
 	for {
@@ -234,11 +238,13 @@ func runConfigWizard(args []string) error {
 		downstreamPath := promptString(reader, "Downstream path", "")
 		defaultUpstreamMethod := promptString(reader, "Default upstream method", downstreamMethod)
 		defaultUpstreamPath := promptString(reader, "Default upstream path", downstreamPath)
+		affinityResponseField := promptString(reader, "Affinity response field (empty to disable)", "")
 		config.Actions[actionKey] = hwdramaproxy.ActionConfig{
 			DownstreamMethod:      downstreamMethod,
 			DownstreamPath:        downstreamPath,
 			DefaultUpstreamMethod: defaultUpstreamMethod,
 			DefaultUpstreamPath:   defaultUpstreamPath,
+			AffinityResponseField: affinityResponseField,
 		}
 	}
 
@@ -265,6 +271,8 @@ func runConfigWizard(args []string) error {
 		Models:                  models,
 		UpstreamBaseURL:         upstreamBaseURL,
 		UpstreamAPIKeyEnv:       upstreamAPIKeyEnv,
+		UpstreamAuthHeader:      upstreamAuthHeader,
+		UpstreamAuthPrefix:      upstreamAuthPrefix,
 		AssetNamespaceID:        assetNamespaceID,
 		EnabledActions:          enabledActions,
 		UpstreamActionOverrides: overrides,

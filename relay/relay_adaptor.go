@@ -37,6 +37,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/hailuo"
 	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
+	seedancedomestic "github.com/QuantumNous/new-api/relay/channel/task/seedancedomestic"
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
@@ -156,6 +157,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskVidu.TaskAdaptor{}
 		case constant.ChannelTypeDoubaoVideo, constant.ChannelTypeVolcEngine:
 			return &taskdoubao.TaskAdaptor{}
+		case constant.ChannelTypeSeedanceDomestic:
+			return &seedancedomestic.TaskAdaptor{}
 		case constant.ChannelTypeSora, constant.ChannelTypeOpenAI:
 			return &tasksora.TaskAdaptor{}
 		case constant.ChannelTypeGemini:
@@ -165,4 +168,15 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 		}
 	}
 	return nil
+}
+
+// TaskAdaptorUsesProviderBilling reports whether a channel's task adaptor
+// supplies its complete price instead of relying on model ratio/price settings.
+func TaskAdaptorUsesProviderBilling(channelType int) bool {
+	adaptor := GetTaskAdaptor(constant.TaskPlatform(strconv.Itoa(channelType)))
+	if adaptor == nil {
+		return false
+	}
+	_, ok := adaptor.(channel.TaskBillingEstimator)
+	return ok
 }

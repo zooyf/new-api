@@ -14,6 +14,11 @@ import (
 
 type TaskStatus string
 
+const (
+	TaskBillingSourceWallet       = "wallet"
+	TaskBillingSourceSubscription = "subscription"
+)
+
 func (t TaskStatus) ToVideoStatus() string {
 	var status string
 	switch t {
@@ -58,8 +63,12 @@ type Task struct {
 	StartTime  int64                 `json:"start_time" gorm:"index"`
 	FinishTime int64                 `json:"finish_time" gorm:"index"`
 	Progress   string                `json:"progress" gorm:"type:varchar(20);index"`
-	Properties Properties            `json:"properties" gorm:"type:json"`
-	Username   string                `json:"username,omitempty" gorm:"-"`
+	// BillingReconciliationPending is a durable enqueue intent. It is written
+	// with the task so a transient failure creating the reconciliation row can
+	// be recovered by the async task worker.
+	BillingReconciliationPending bool       `json:"-" gorm:"index"`
+	Properties                   Properties `json:"properties" gorm:"type:json"`
+	Username                     string     `json:"username,omitempty" gorm:"-"`
 	// 禁止返回给用户，内部可能包含key等隐私信息
 	PrivateData TaskPrivateData `json:"-" gorm:"column:private_data;type:json"`
 	Data        json.RawMessage `json:"data" gorm:"type:json"`
@@ -116,12 +125,27 @@ type TaskEndpointSnapshot struct {
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
 type TaskBillingContext struct {
-	ModelPrice      float64            `json:"model_price,omitempty"`       // 模型单价
-	GroupRatio      float64            `json:"group_ratio,omitempty"`       // 分组倍率
-	ModelRatio      float64            `json:"model_ratio,omitempty"`       // 模型倍率
-	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
-	OriginModelName string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
-	PerCallBilling  bool               `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
+	ModelPrice      float64                      `json:"model_price,omitempty"`       // 模型单价
+	GroupRatio      float64                      `json:"group_ratio,omitempty"`       // 分组倍率
+	ModelRatio      float64                      `json:"model_ratio,omitempty"`       // 模型倍率
+	OtherRatios     map[string]float64           `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
+	OriginModelName string                       `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
+	PerCallBilling  bool                         `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
+	ProviderBilling *TaskProviderBillingSnapshot `json:"provider_billing,omitempty"`
+}
+
+// TaskProviderBillingSnapshot freezes provider-specific pricing inputs at
+// submission time so settlement is independent of later configuration changes.
+type TaskProviderBillingSnapshot struct {
+	Provider                    string  `json:"provider"`
+	Currency                    string  `json:"currency"`
+	UnitPricePerMillionTokens   string  `json:"unit_price_per_million_tokens"`
+	CNYPerUSD                   string  `json:"cny_per_usd"`
+	GroupRatio                  float64 `json:"group_ratio"`
+	Resolution                  string  `json:"resolution"`
+	HasVideoInput               bool    `json:"has_video_input"`
+	EstimatedTokens             int64   `json:"estimated_tokens"`
+	AsyncReconciliationRequired bool    `json:"async_reconciliation_required"`
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）
@@ -181,7 +205,8 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 	privateData := TaskPrivateData{}
 	if relayInfo != nil && relayInfo.ChannelMeta != nil {
 		if relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeGemini ||
-			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeVertexAi {
+			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeVertexAi ||
+			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeSeedanceDomestic {
 			privateData.Key = relayInfo.ChannelMeta.ApiKey
 		}
 		if relayInfo.UpstreamModelName != "" {

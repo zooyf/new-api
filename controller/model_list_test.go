@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -373,6 +374,104 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-tiered-empty-expr-model")
 	require.NotContains(t, ids, "zz-token-tiered-missing-expr-model")
 	require.NotContains(t, ids, "zz-token-unpriced-model")
+}
+
+func TestListModelsTokenLimitIncludesOnlyProviderBilledSeedanceChannel(t *testing.T) {
+	withSelfUseModeDisabled(t)
+	const seedanceModel = "doubao-seedance-2-0-260128"
+
+	savedModelPrices := ratio_setting.ModelPrice2JSONString()
+	savedModelRatios := ratio_setting.ModelRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedModelPrices))
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedModelRatios))
+	})
+	modelPrices := ratio_setting.GetModelPriceCopy()
+	delete(modelPrices, seedanceModel)
+	modelPricesJSON, err := common.Marshal(modelPrices)
+	require.NoError(t, err)
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(modelPricesJSON)))
+	modelRatios := ratio_setting.GetModelRatioCopy()
+	delete(modelRatios, seedanceModel)
+	modelRatiosJSON, err := common.Marshal(modelRatios)
+	require.NoError(t, err)
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(modelRatiosJSON)))
+
+	_, hasPrice := ratio_setting.GetModelPrice(seedanceModel, false)
+	require.False(t, hasPrice)
+	_, hasRatio, _ := ratio_setting.GetModelRatio(seedanceModel)
+	require.False(t, hasRatio)
+
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&[]model.Channel{
+		{
+			Id:     801,
+			Type:   constant.ChannelTypeSeedanceDomestic,
+			Key:    "domestic-key",
+			Status: common.ChannelStatusEnabled,
+			Name:   "seedance-domestic",
+			Group:  "domestic",
+			Models: seedanceModel,
+		},
+		{
+			Id:     802,
+			Type:   constant.ChannelTypeDoubaoVideo,
+			Key:    "doubao-key",
+			Status: common.ChannelStatusEnabled,
+			Name:   "doubao-video",
+			Group:  "doubao",
+			Models: seedanceModel,
+		},
+		{
+			Id:     803,
+			Type:   constant.ChannelTypeSeedanceDomestic,
+			Key:    "mixed-domestic-key",
+			Status: common.ChannelStatusEnabled,
+			Name:   "mixed-seedance-domestic",
+			Group:  "mixed",
+			Models: seedanceModel,
+		},
+		{
+			Id:     804,
+			Type:   constant.ChannelTypeDoubaoVideo,
+			Key:    "mixed-doubao-key",
+			Status: common.ChannelStatusEnabled,
+			Name:   "mixed-doubao-video",
+			Group:  "mixed",
+			Models: seedanceModel,
+		},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "domestic", Model: seedanceModel, ChannelId: 801, Enabled: true},
+		{Group: "doubao", Model: seedanceModel, ChannelId: 802, Enabled: true},
+		{Group: "mixed", Model: seedanceModel, ChannelId: 803, Enabled: true},
+		{Group: "mixed", Model: seedanceModel, ChannelId: 804, Enabled: true},
+	}).Error)
+
+	listForGroup := func(group string) map[string]struct{} {
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		common.SetContextKey(ctx, constant.ContextKeyUserGroup, group)
+		common.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, true)
+		common.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, map[string]bool{
+			seedanceModel:             true,
+			"zz-token-unpriced-model": true,
+		})
+
+		ListModels(ctx, constant.ChannelTypeOpenAI)
+		return decodeListModelsResponse(t, recorder)
+	}
+
+	domesticModels := listForGroup("domestic")
+	require.Contains(t, domesticModels, seedanceModel)
+	require.NotContains(t, domesticModels, "zz-token-unpriced-model")
+
+	doubaoModels := listForGroup("doubao")
+	require.NotContains(t, doubaoModels, seedanceModel)
+
+	mixedModels := listForGroup("mixed")
+	require.NotContains(t, mixedModels, seedanceModel)
 }
 
 func TestCheckUpdatePasswordRequiresCurrentPassword(t *testing.T) {

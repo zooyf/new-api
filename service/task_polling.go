@@ -38,6 +38,10 @@ type taskEndpointFetcher interface {
 	FetchTaskAt(baseURL string, key string, fetchPath string, body map[string]any, proxy string) (*http.Response, error)
 }
 
+type taskDataSanitizer interface {
+	SanitizeTaskData(task *model.Task, responseBody []byte) ([]byte, error)
+}
+
 // GetTaskAdaptorFunc 由 main 包注入，用于获取指定平台的任务适配器。
 // 打破 service -> relay -> relay/channel -> service 的循环依赖。
 var GetTaskAdaptorFunc func(platform constant.TaskPlatform) TaskPollingAdaptor
@@ -97,9 +101,10 @@ func sweepTimedOutTasks(ctx context.Context) {
 // TaskPollSummary is the result recorded on an async_task_poll system task row,
 // summarizing one polling pass.
 type TaskPollSummary struct {
-	UnfinishedTasks  int `json:"unfinished_tasks"`
-	PlatformsScanned int `json:"platforms_scanned"`
-	NullTasksFailed  int `json:"null_tasks_failed"`
+	UnfinishedTasks       int                              `json:"unfinished_tasks"`
+	PlatformsScanned      int                              `json:"platforms_scanned"`
+	NullTasksFailed       int                              `json:"null_tasks_failed"`
+	BillingReconciliation TaskBillingReconciliationSummary `json:"billing_reconciliation"`
 }
 
 // RunTaskPollingOnce performs one async-task (Suno/video) polling pass
@@ -172,6 +177,9 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 	}
 	if report != nil && ctx.Err() == nil {
 		report(totalPlatforms, totalPlatforms)
+	}
+	if ctx.Err() == nil {
+		summary.BillingReconciliation = RunTaskBillingReconciliationOnce(ctx, 100)
 	}
 	common.SysLog("任务进度轮询完成")
 	return summary
@@ -506,7 +514,14 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
 	}
 
-	task.Data = redactVideoResponseBody(responseBody)
+	taskData := redactVideoResponseBody(responseBody)
+	if sanitizer, ok := adaptor.(taskDataSanitizer); ok {
+		taskData, err = sanitizer.SanitizeTaskData(task, taskData)
+		if err != nil {
+			return fmt.Errorf("sanitize task data for task %s: %w", task.TaskID, err)
+		}
+	}
+	task.Data = taskData
 
 	logger.LogDebug(ctx, "updateVideoSingleTask taskResult: %+v", taskResult)
 
@@ -661,6 +676,9 @@ func truncateBase64(s string) string {
 //  2. taskResult.TotalTokens > 0 → 按 token 重算
 //  3. 都不满足 → 保持预扣额度不变
 func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) {
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.ProviderBilling != nil && bc.ProviderBilling.AsyncReconciliationRequired {
+		return
+	}
 	// 0. 按次计费的任务不做差额结算
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))

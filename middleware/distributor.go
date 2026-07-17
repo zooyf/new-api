@@ -32,11 +32,41 @@ type ModelRequest struct {
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var channel *model.Channel
+		assetAffinityFound := false
 		channelId, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
+		}
+		affinityChannelID, found, affinityErr := resolveAssetRequestChannel(c)
+		if affinityErr != nil {
+			abortWithOpenAiMessage(c, http.StatusBadRequest, affinityErr.Error())
+			return
+		}
+		if found {
+			if common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled) {
+				limits, limitsOK := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+				tokenModelLimit, typeOK := limits.(map[string]bool)
+				matchName := ratio_setting.FormatMatchingModelName(modelRequest.Model)
+				if !limitsOK || !typeOK || !tokenModelLimit[matchName] {
+					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": modelRequest.Model}))
+					return
+				}
+			}
+			if ok {
+				explicitChannelID, stringOK := channelId.(string)
+				parsedChannelID, parseErr := strconv.Atoi(explicitChannelID)
+				if !stringOK || parseErr != nil || parsedChannelID != affinityChannelID {
+					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
+					return
+				}
+			} else {
+				channelId = strconv.Itoa(affinityChannelID)
+				ok = true
+				common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, channelId)
+			}
+			assetAffinityFound = true
 		}
 		if ok {
 			id, err := strconv.Atoi(channelId.(string))
@@ -51,6 +81,10 @@ func Distribute() func(c *gin.Context) {
 			}
 			if channel.Status != common.ChannelStatusEnabled {
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+				return
+			}
+			if assetAffinityFound && !assetAffinityChannelEnabledForGroup(c, channel.Id, modelRequest.Model) {
+				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
 				return
 			}
 		} else {
@@ -165,6 +199,73 @@ func Distribute() func(c *gin.Context) {
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			service.RecordChannelAffinity(c, channel.Id)
+		}
+	}
+}
+
+func assetAffinityChannelEnabledForGroup(c *gin.Context, channelID int, modelName string) bool {
+	usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	if usingGroup != "auto" {
+		return model.IsChannelEnabledForGroupModel(usingGroup, modelName, channelID)
+	}
+	userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+	for _, group := range service.GetUserAutoGroup(userGroup) {
+		if model.IsChannelEnabledForGroupModel(group, modelName, channelID) {
+			common.SetContextKey(c, constant.ContextKeyAutoGroup, group)
+			common.SetContextKey(c, constant.ContextKeyUsingGroup, group)
+			return true
+		}
+	}
+	return false
+}
+
+func resolveAssetRequestChannel(c *gin.Context) (int, bool, error) {
+	if c.Request.Method != http.MethodPost ||
+		(!strings.Contains(c.Request.URL.Path, "/v1/video/generations") && !strings.Contains(c.Request.URL.Path, "/v1/videos")) {
+		return 0, false, nil
+	}
+	var payload any
+	if err := common.UnmarshalBodyReusable(c, &payload); err != nil {
+		return 0, false, nil
+	}
+	references := make(map[string]struct{})
+	collectAssetReferences(payload, references, 0)
+	if len(references) == 0 {
+		return 0, false, nil
+	}
+	externalIDs := make([]string, 0, len(references))
+	for id := range references {
+		externalIDs = append(externalIDs, id)
+	}
+	return model.ResolveAssetChannelBinding(externalIDs, c.GetInt("token_id"))
+}
+
+func collectAssetReferences(value any, references map[string]struct{}, depth int) {
+	if depth > 16 {
+		return
+	}
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		for _, child := range typed {
+			collectAssetReferences(child, references, depth+1)
+		}
+	case []interface{}:
+		for _, child := range typed {
+			collectAssetReferences(child, references, depth+1)
+		}
+	case string:
+		text := strings.TrimSpace(typed)
+		if strings.HasPrefix(text, "asset://") {
+			if id := strings.TrimSpace(strings.TrimPrefix(text, "asset://")); id != "" {
+				references[id] = struct{}{}
+			}
+			return
+		}
+		if strings.HasPrefix(text, "{") || strings.HasPrefix(text, "[") {
+			var nested any
+			if err := common.Unmarshal([]byte(text), &nested); err == nil {
+				collectAssetReferences(nested, references, depth+1)
+			}
 		}
 	}
 }

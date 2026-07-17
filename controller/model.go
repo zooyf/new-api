@@ -227,6 +227,28 @@ func ListModels(c *gin.Context, modelType int) {
 		return
 	}
 	ownerGroups := groups.ownerGroups
+	providerBilledModels := make(map[string]struct{})
+	nonProviderBilledModels := make(map[string]struct{})
+	if !acceptUnsetRatioModel {
+		abilities, err := model.GetEnabledAbilitiesWithChannelsByGroups(ownerGroups)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": "get provider billing models failed",
+			})
+			return
+		}
+		for _, ability := range abilities {
+			if relay.TaskAdaptorUsesProviderBilling(ability.ChannelType) {
+				if _, hasNonProviderChannel := nonProviderBilledModels[ability.Model]; !hasNonProviderChannel {
+					providerBilledModels[ability.Model] = struct{}{}
+				}
+				continue
+			}
+			nonProviderBilledModels[ability.Model] = struct{}{}
+			delete(providerBilledModels, ability.Model)
+		}
+	}
 	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 	if modelLimitEnable {
 		s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
@@ -238,7 +260,7 @@ func ListModels(c *gin.Context, modelType int) {
 		}
 		for allowModel, _ := range tokenModelLimit {
 			if !acceptUnsetRatioModel {
-				if !helper.HasModelBillingConfig(allowModel) {
+				if _, ok := providerBilledModels[allowModel]; !ok && !helper.HasModelBillingConfig(allowModel) {
 					continue
 				}
 			}
@@ -260,7 +282,7 @@ func ListModels(c *gin.Context, modelType int) {
 		}
 		for _, modelName := range models {
 			if !acceptUnsetRatioModel {
-				if !helper.HasModelBillingConfig(modelName) {
+				if _, ok := providerBilledModels[modelName]; !ok && !helper.HasModelBillingConfig(modelName) {
 					continue
 				}
 			}

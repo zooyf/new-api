@@ -24,6 +24,7 @@ type ActionConfig struct {
 	DownstreamPath        string `yaml:"downstream_path"`
 	DefaultUpstreamMethod string `yaml:"default_upstream_method"`
 	DefaultUpstreamPath   string `yaml:"default_upstream_path"`
+	AffinityResponseField string `yaml:"affinity_response_field,omitempty"`
 }
 
 type RouteConfig struct {
@@ -34,6 +35,8 @@ type RouteConfig struct {
 	Models                  []string                        `yaml:"models"`
 	UpstreamBaseURL         string                          `yaml:"upstream_base_url"`
 	UpstreamAPIKeyEnv       string                          `yaml:"upstream_api_key_env"`
+	UpstreamAuthHeader      string                          `yaml:"upstream_auth_header,omitempty"`
+	UpstreamAuthPrefix      string                          `yaml:"upstream_auth_prefix,omitempty"`
 	AssetNamespaceID        string                          `yaml:"asset_namespace_id"`
 	EnabledActions          []string                        `yaml:"enabled_actions"`
 	UpstreamActionOverrides map[string]UpstreamActionConfig `yaml:"upstream_action_overrides,omitempty"`
@@ -76,6 +79,7 @@ func (config *RoutesConfig) Normalize() {
 		action.DefaultUpstreamMethod = normalizeMethod(action.DefaultUpstreamMethod)
 		action.DownstreamPath = strings.TrimSpace(action.DownstreamPath)
 		action.DefaultUpstreamPath = strings.TrimSpace(action.DefaultUpstreamPath)
+		action.AffinityResponseField = strings.TrimSpace(action.AffinityResponseField)
 		config.Actions[key] = action
 	}
 	for i := range config.Routes {
@@ -83,6 +87,14 @@ func (config *RoutesConfig) Normalize() {
 		route.Name = strings.TrimSpace(route.Name)
 		route.UpstreamBaseURL = strings.TrimSpace(route.UpstreamBaseURL)
 		route.UpstreamAPIKeyEnv = strings.TrimSpace(route.UpstreamAPIKeyEnv)
+		route.UpstreamAuthHeader = strings.TrimSpace(route.UpstreamAuthHeader)
+		route.UpstreamAuthPrefix = strings.TrimSpace(route.UpstreamAuthPrefix)
+		if route.UpstreamAuthHeader == "" {
+			route.UpstreamAuthHeader = "Authorization"
+		}
+		if strings.EqualFold(route.UpstreamAuthHeader, "Authorization") && route.UpstreamAuthPrefix == "" {
+			route.UpstreamAuthPrefix = "Bearer"
+		}
 		route.AssetNamespaceID = strings.TrimSpace(route.AssetNamespaceID)
 		route.Models = normalizeList(route.Models)
 		route.EnabledActions = normalizeList(route.EnabledActions)
@@ -125,6 +137,9 @@ func (config *RoutesConfig) Validate(secretLookup func(string) string) error {
 		if err := validatePathTemplate(action.DefaultUpstreamPath, "action "+actionKey+" default_upstream_path"); err != nil {
 			return err
 		}
+		if isPrivateBillingPath(action.DefaultUpstreamPath) {
+			return fmt.Errorf("action %s cannot expose the private Seedance billing endpoint", actionKey)
+		}
 		downstreamKey := action.DownstreamMethod + " " + normalizePathTemplate(action.DownstreamPath)
 		if existing, ok := actionByDownstream[downstreamKey]; ok {
 			return fmt.Errorf("actions %s and %s share downstream endpoint %s", existing, actionKey, downstreamKey)
@@ -166,11 +181,18 @@ func (config *RoutesConfig) Validate(secretLookup func(string) string) error {
 		if route.UpstreamBaseURL == "" {
 			return fmt.Errorf("route %s upstream_base_url cannot be empty", route.Name)
 		}
-		if _, err := parseBaseURL(route.UpstreamBaseURL); err != nil {
+		baseURL, err := parseBaseURL(route.UpstreamBaseURL)
+		if err != nil {
 			return fmt.Errorf("route %s upstream_base_url: %w", route.Name, err)
 		}
 		if route.UpstreamAPIKeyEnv == "" {
 			return fmt.Errorf("route %s upstream_api_key_env cannot be empty", route.Name)
+		}
+		if !validHeaderName(route.UpstreamAuthHeader) {
+			return fmt.Errorf("route %s upstream_auth_header is invalid", route.Name)
+		}
+		if strings.ContainsAny(route.UpstreamAuthPrefix, "\r\n") {
+			return fmt.Errorf("route %s upstream_auth_prefix is invalid", route.Name)
 		}
 		if secretLookup != nil && strings.TrimSpace(secretLookup(route.UpstreamAPIKeyEnv)) == "" {
 			return fmt.Errorf("route %s upstream api key env %s is empty", route.Name, route.UpstreamAPIKeyEnv)
@@ -179,8 +201,19 @@ func (config *RoutesConfig) Validate(secretLookup func(string) string) error {
 			return fmt.Errorf("route %s enabled_actions cannot be empty", route.Name)
 		}
 		for _, actionKey := range route.EnabledActions {
-			if _, ok := config.Actions[actionKey]; !ok {
+			action, ok := config.Actions[actionKey]
+			if !ok {
 				return fmt.Errorf("route %s references unknown action %s", route.Name, actionKey)
+			}
+			if action.AffinityResponseField != "" && route.AssetNamespaceID == "" {
+				return fmt.Errorf("route %s asset_namespace_id is required for affinity action %s", route.Name, actionKey)
+			}
+			upstreamPath := action.DefaultUpstreamPath
+			if override, hasOverride := route.UpstreamActionOverrides[actionKey]; hasOverride && override.UpstreamPath != "" {
+				upstreamPath = override.UpstreamPath
+			}
+			if isPrivateBillingPath(singleJoiningSlash(baseURL.Path, upstreamPath)) {
+				return fmt.Errorf("route %s cannot expose the private Seedance billing endpoint", route.Name)
 			}
 		}
 		for actionKey, override := range route.UpstreamActionOverrides {
@@ -199,6 +232,9 @@ func (config *RoutesConfig) Validate(secretLookup func(string) string) error {
 				if err := validatePathTemplate(override.UpstreamPath, "route "+route.Name+" override "+actionKey+" upstream_path"); err != nil {
 					return err
 				}
+				if isPrivateBillingPath(override.UpstreamPath) {
+					return fmt.Errorf("route %s cannot expose the private Seedance billing endpoint", route.Name)
+				}
 			}
 		}
 		for _, apiKeyID := range routeAPIKeyIDs(route) {
@@ -214,6 +250,29 @@ func (config *RoutesConfig) Validate(secretLookup func(string) string) error {
 		}
 	}
 	return nil
+}
+
+func isPrivateBillingPath(path string) bool {
+	path = strings.ToLower(strings.TrimRight(strings.TrimSpace(path), "/"))
+	return strings.HasSuffix(path, "/listsplitbilldetail")
+}
+
+func validHeaderName(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') {
+			continue
+		}
+		switch char {
+		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func routeAPIKeyIDs(route RouteConfig) []int {

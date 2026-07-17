@@ -218,14 +218,6 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		return
 	}
 
-	logger.LogInfo(ctx, fmt.Sprintf("任务 %s 差额结算：delta=%s（实际：%s，预扣：%s，%s）",
-		task.TaskID,
-		logger.LogQuota(quotaDelta),
-		logger.LogQuota(actualQuota),
-		logger.LogQuota(preConsumedQuota),
-		reason,
-	))
-
 	// 调整资金来源
 	if err := taskAdjustFunding(task, quotaDelta); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("差额结算资金调整失败 task %s: %s", task.TaskID, err.Error()))
@@ -239,6 +231,21 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	if err := task.UpdateQuota(); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("差额结算回写 quota 失败 task %s: %s", task.TaskID, err.Error()))
 	}
+	recordTaskQuotaAdjustment(ctx, task, preConsumedQuota, actualQuota, reason, clamps...)
+}
+
+func recordTaskQuotaAdjustment(ctx context.Context, task *model.Task, preConsumedQuota int, actualQuota int, reason string, clamps ...*common.QuotaClamp) {
+	quotaDelta := actualQuota - preConsumedQuota
+	if quotaDelta == 0 {
+		return
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("任务 %s 差额结算：delta=%s（实际：%s，预扣：%s，%s）",
+		task.TaskID,
+		logger.LogQuota(quotaDelta),
+		logger.LogQuota(actualQuota),
+		logger.LogQuota(preConsumedQuota),
+		reason,
+	))
 
 	var logType int
 	var logQuota int

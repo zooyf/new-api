@@ -55,6 +55,81 @@ func TestRoutesConfigValidateRejectsFullUpstreamURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "must be a path")
 }
 
+func TestRoutesConfigRequiresNamespaceForAffinityResponse(t *testing.T) {
+	config := sampleRoutesConfig()
+	action := config.Actions["seedance_open_create_asset"]
+	action.AffinityResponseField = "data.id"
+	config.Actions["seedance_open_create_asset"] = action
+
+	err := config.Validate(func(string) string { return "upstream-key" })
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "asset_namespace_id is required")
+}
+
+func TestRoutesConfigRejectsPrivateSeedanceBillingEndpoint(t *testing.T) {
+	t.Run("default path", func(t *testing.T) {
+		config := sampleRoutesConfig()
+		action := config.Actions["seedance_open_create_asset"]
+		action.DefaultUpstreamPath = "/asset/SdToolApi/ListSplitBillDetail"
+		config.Actions["seedance_open_create_asset"] = action
+
+		err := config.Validate(func(string) string { return "upstream-key" })
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "private Seedance billing endpoint")
+	})
+
+	t.Run("route override", func(t *testing.T) {
+		config := sampleRoutesConfig()
+		config.Routes[0].UpstreamActionOverrides = map[string]UpstreamActionConfig{
+			"seedance_open_create_asset": {
+				UpstreamPath: "/ListSplitBillDetail",
+			},
+		}
+
+		err := config.Validate(func(string) string { return "upstream-key" })
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "private Seedance billing endpoint")
+	})
+
+	t.Run("base URL path", func(t *testing.T) {
+		config := sampleRoutesConfig()
+		config.Routes[0].UpstreamBaseURL = "https://supplier.example.com/asset/SdToolApi/ListSplitBillDetail"
+		action := config.Actions["seedance_open_create_asset"]
+		action.DefaultUpstreamPath = "/"
+		config.Actions["seedance_open_create_asset"] = action
+
+		err := config.Validate(func(string) string { return "upstream-key" })
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "private Seedance billing endpoint")
+	})
+}
+
+func TestRuntimeRouterCarriesCustomAuthenticationAndAffinityNamespace(t *testing.T) {
+	config := sampleRoutesConfig()
+	config.Routes[0].UpstreamAuthHeader = "lmd-key"
+	config.Routes[0].UpstreamAuthPrefix = ""
+	config.Routes[0].AssetNamespaceID = "seedance-cn"
+	action := config.Actions["seedance_open_create_asset"]
+	action.AffinityResponseField = "data.id"
+	config.Actions["seedance_open_create_asset"] = action
+	router, err := BuildRuntimeRouter(config, func(string) string { return "supplier-secret" })
+	require.NoError(t, err)
+	actionMatch, decision := router.LookupAction("POST", "/api/v3/open/CreateAsset")
+	require.True(t, decision.MethodAllowed)
+
+	match, ok, err := router.Match(7, "doubao-seedance-2-0-fast-filter-off", actionMatch)
+
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "lmd-key", match.UpstreamAuthHeader)
+	assert.Empty(t, match.UpstreamAuthPrefix)
+	assert.Equal(t, "seedance-cn", match.AssetNamespaceID)
+}
+
 func TestRuntimeRouterMatchesExactModelBeforeWildcard(t *testing.T) {
 	config := sampleRoutesConfig()
 	config.Routes = append(config.Routes, RouteConfig{

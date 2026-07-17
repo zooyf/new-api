@@ -85,3 +85,15 @@ type OpenAIVideoConverter interface {
 type TaskEndpointSnapshotProvider interface {
 	TaskEndpointSnapshot() *model.TaskEndpointSnapshot
 }
+
+// TaskBillingEstimate is a complete provider-specific pre-charge result. It is
+// used when the provider's billing currency or unit cannot be represented by
+// the generic model-price plus OtherRatios flow.
+type TaskBillingEstimate struct {
+	PriceData types.PriceData
+	Snapshot  *model.TaskProviderBillingSnapshot
+}
+
+type TaskBillingEstimator interface {
+	EstimateTaskBilling(c *gin.Context, info *relaycommon.RelayInfo) (*TaskBillingEstimate, *dto.TaskError)
+}

@@ -31,6 +31,14 @@ type taskPollingFetchAdaptor struct {
 	blockOnce    sync.Once
 }
 
+type taskPollingSanitizingAdaptor struct {
+	*taskPollingFetchAdaptor
+}
+
+func (a *taskPollingSanitizingAdaptor) SanitizeTaskData(task *model.Task, _ []byte) ([]byte, error) {
+	return common.Marshal(map[string]any{"id": task.TaskID})
+}
+
 func (a *taskPollingFetchAdaptor) Init(_ *relaycommon.RelayInfo) {}
 
 func (a *taskPollingFetchAdaptor) FetchTask(_ string, _ string, body map[string]any, _ string) (*http.Response, error) {
@@ -143,6 +151,26 @@ func seedPollingTask(t *testing.T, channelID int, publicID string, upstreamID st
 	}
 	require.NoError(t, model.DB.Create(task).Error)
 	return task
+}
+
+func TestUpdateVideoTaskPersistsSanitizedProviderData(t *testing.T) {
+	truncate(t)
+	const channelID = 91
+	seedTaskPollingChannel(t, channelID, true)
+	task := seedPollingTask(t, channelID, "task_public_sanitized", "upstream_private_1200")
+	channel, err := model.CacheGetChannel(channelID)
+	require.NoError(t, err)
+	adaptor := &taskPollingSanitizingAdaptor{taskPollingFetchAdaptor: &taskPollingFetchAdaptor{}}
+
+	err = updateVideoSingleTask(context.Background(), adaptor, channel, task.GetUpstreamTaskID(), map[string]*model.Task{
+		task.GetUpstreamTaskID(): task,
+	})
+
+	require.NoError(t, err)
+	var stored model.Task
+	require.NoError(t, model.DB.First(&stored, task.ID).Error)
+	assert.NotContains(t, string(stored.Data), "upstream_private_1200")
+	assert.Contains(t, string(stored.Data), "task_public_sanitized")
 }
 
 func TestUpdateVideoTasksDefaultSleepWaitsBetweenTasks(t *testing.T) {

@@ -1,0 +1,1115 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Nexus Reach Seedance 2.0 API",
+    "version": "2026-07-17",
+    "description": "Seedance 2.0 国内视频生成与素材资产接口。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。"
+  },
+  "servers": [
+    {
+      "url": "https://gateway.nexus-reach.com",
+      "description": "Nexus Reach API Gateway"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "视频生成",
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。创建任务后保存返回的 `task_id`，再通过查询接口轮询状态。视频生成通常需要数分钟；成功后返回临时下载地址，请及时下载并保存。\n\n人民币基础报价（单位：元/百万 tokens）：\n\n| 分辨率 | 无输入视频 | 含输入视频 |\n| --- | ---: | ---: |\n| 720p | ¥46 | ¥28 |\n| 1080p | ¥51 | ¥31 |\n| 4K | ¥26（计划价） | ¥16（计划价） |\n\n费用公式：`实际费用（人民币）= 最终 total_tokens ÷ 1,000,000 × 对应人民币单价`。例如，720p 无输入视频任务最终使用 87,277 tokens，则费用为 `87,277 ÷ 1,000,000 × ¥46 = ¥4.014742`。仅成功任务按最终实际用量结算；如商务合同另有约定，以合同为准。4K 需要单独确认渠道已开通，且当前尚未完成端到端验证，因此暂不在 `resolution` 的公开可用枚举中。"
+    },
+    {
+      "name": "真人认证",
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。真人认证仅用于依法授权的真人素材流程。创建会话后应立即打开 H5Link；BytedToken 和 H5Link 的有效期均为 120 秒、仅能使用一次。"
+    },
+    {
+      "name": "素材资产",
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。CreateAsset 是异步接口，创建素材后需轮询 GetAsset；只有 Status 为 Active 的素材才能通过 `asset://<AssetId>` 用于视频生成。素材必须拥有完整合法的使用权，不得包含未授权商标、标识或真实自然人肖像，不得侵犯第三方人格权或知识产权，并应符合适用法律法规。素材入库仅支持合规的虚拟或仿真人物资产；依法授权的真人素材应先完成真人认证流程。"
+    }
+  ],
+  "paths": {
+    "/v1/video/generations": {
+      "post": {
+        "tags": ["视频生成"],
+        "summary": "创建 Seedance 2.0 视频任务",
+        "operationId": "createSeedanceDomesticVideo",
+        "description": "支持文本、图片、视频和音频组合输入。`content` 中最多包含 9 张图片、3 个视频和 3 个音频；音频不能单独作为输入。使用素材库资源时，将 `asset://<AssetId>` 写入对应媒体对象的 `url` 字段。提示词应按媒体在 `content` 中出现的顺序使用“图片1、图片2、视频1”等称呼，禁止直接在提示词中填写 AssetId。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoGenerationRequest"
+              },
+              "example": {
+                "model": "doubao-seedance-2-0-260128",
+                "content": [
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "asset://asset-20260716-reference"
+                    },
+                    "role": "reference_image"
+                  },
+                  {
+                    "type": "text",
+                    "text": "图片1中的虚拟人物在海边自然行走，镜头缓慢向前推进。"
+                  }
+                ],
+                "audio_status": 1,
+                "resolution": "720p",
+                "ratio": "16:9",
+                "dur": 5
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "任务创建成功。请保存返回的公开任务 ID，用于后续查询。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoSubmitResponse"
+                },
+                "example": {
+                  "id": "task_01jzseedanceexample",
+                  "task_id": "task_01jzseedanceexample",
+                  "object": "video",
+                  "model": "doubao-seedance-2-0-260128",
+                  "status": "queued",
+                  "progress": 0,
+                  "created_at": 1784169600
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误或内容未通过校验。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "message": "dur must be -1 or an integer between 4 and 15",
+                    "type": "invalid_request_error",
+                    "code": "invalid_request"
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/v1/video/generations/{task_id}": {
+      "get": {
+        "tags": ["视频生成"],
+        "summary": "查询视频任务",
+        "operationId": "getSeedanceDomesticVideo",
+        "description": "使用创建接口返回的 `task_id` 轮询任务状态。`SUCCESS` 表示完成，`FAILURE` 表示失败，`UNKNOWN` 表示暂时无法确认；其他状态表示仍在排队或生成中。成功后从 `data.result_url` 获取临时视频下载地址。下载地址存在时效限制，请立即保存到自己的存储。",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "创建任务时返回的公开任务 ID。",
+            "schema": {
+              "type": "string"
+            },
+            "example": "task_01jzseedanceexample"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "任务状态。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskFetchResponse"
+                },
+                "example": {
+                  "code": "success",
+                  "data": {
+                    "task_id": "task_01jzseedanceexample",
+                    "status": "SUCCESS",
+                    "fail_reason": "",
+                    "result_url": "https://cdn.example.invalid/seedance/results/task_01jzseedanceexample.mp4?expires=1784173800&signature=example",
+                    "submit_time": 1784169600,
+                    "start_time": 1784169620,
+                    "finish_time": 1784170200,
+                    "progress": "100%"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "任务不存在或不属于当前 API Key。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "message": "task_not_exist",
+                    "type": "invalid_request_error",
+                    "code": "task_not_exist"
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/v3/open/CreateVisualValidateSession": {
+      "post": {
+        "tags": ["真人认证"],
+        "summary": "创建真人活体认证会话",
+        "operationId": "createVisualValidateSession",
+        "description": "创建一次性活体认证会话。客户端应立即打开返回的 H5Link；认证页面结束后会跳转到 CallbackURL，并附带 bytedToken、resultCode、algorithmBaseRespCode、reqMeasureInfoValue 和 verify_type 等查询参数。BytedToken 与 H5Link 均在 120 秒后失效，且只能使用一次。H5Link 可追加 `lng=zh`、`lng=en` 或 `lng=zh-Hant` 选择语言。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVisualValidateSessionRequest"
+              },
+              "example": {
+                "CallbackURL": "https://gateway.nexus-reach.com/apidocs/apidocs-example-callback.html"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "认证会话创建成功。业务结果位于 `data.Result`。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateVisualValidateSessionResponse"
+                },
+                "example": {
+                  "state": 1,
+                  "data": {
+                    "ResponseMetadata": {},
+                    "Result": {
+                      "BytedToken": "20260716120000-example-token",
+                      "H5Link": "https://verify.example.invalid/session?bytedToken=20260716120000-example-token&lng=zh",
+                      "CallbackURL": "https://gateway.nexus-reach.com/apidocs/apidocs-example-callback.html"
+                    }
+                  },
+                  "error": null
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/v3/open/GetVisualValidateResult": {
+      "post": {
+        "tags": ["真人认证"],
+        "summary": "获取真人认证素材组",
+        "operationId": "getVisualValidateResult",
+        "description": "仅在回调参数 `resultCode=10000` 时调用。BytedToken 的有效期为 120 秒且只能使用一次；超时或已使用时需重新创建认证会话。成功响应的 `data.GroupId` 路径来自当前接口契约，尚未完成真人认证端到端验证；已实测无效令牌会返回 HTTP 200、`state=0`、`data=null` 和错误消息数组。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetVisualValidateResultRequest"
+              },
+              "example": {
+                "BytedToken": "20260716120000-example-token"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "返回认证流程自动创建的素材组 ID，位于 `data.GroupId`（成功路径尚未完成端到端验证）。业务校验失败时 HTTP 状态仍可能为 200，应同时检查 `state` 和 `error`。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetVisualValidateResultResponse"
+                },
+                "example": {
+                  "state": 1,
+                  "data": {
+                    "GroupId": "group-20260716120500-example"
+                  },
+                  "error": null
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/v3/open/CreateAssetGroup": {
+      "post": {
+        "tags": ["素材资产"],
+        "summary": "创建素材组",
+        "operationId": "createAssetGroup",
+        "description": "为同一虚拟人物或同一业务用途的素材创建分组。Name 最多 64 个字符，Description 最多 300 个字符。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssetGroupRequest"
+              },
+              "example": {
+                "Name": "品牌虚拟人物",
+                "Description": "用于 Seedance 视频生成的已授权虚拟人物素材"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "素材组创建成功。素材组 ID 位于 `data.Id`。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateAssetGroupResponse"
+                },
+                "example": {
+                  "state": 1,
+                  "data": {
+                    "Id": "group-20260716121000-example"
+                  },
+                  "error": null
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/v3/open/CreateAsset": {
+      "post": {
+        "tags": ["素材资产"],
+        "summary": "上传素材",
+        "operationId": "createAsset",
+        "description": "将公网可访问的虚拟人物图片、视频或音频加入素材组。示例 URL 是不可访问的占位地址，调用时必须替换成自己的公网直链，不支持 Base64。接口异步返回 AssetId，随后必须轮询 GetAsset，直到 Status 为 Active。\n\n素材约束：\n\n- Image：jpeg、png、webp、bmp、tiff、gif、heic、heif；宽高均为 300～6000 px；宽高比 0.4～2.5；不超过 30 MB。\n- Video：mp4、mov；仅 480p 或 720p；2～15 秒；24～60 FPS；宽高均为 300～6000 px；宽高比 0.4～2.5；总像素 409,600～927,408；不超过 50 MB。\n- Audio：wav、mp3；2～15 秒；不超过 15 MB。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssetRequest"
+              },
+              "example": {
+                "GroupId": "group-20260716121000-example",
+                "URL": "https://assets.example.invalid/seedance/virtual-person/reference-720p.png",
+                "Name": "virtual-person-reference",
+                "AssetType": "Image"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "素材已进入异步处理队列。素材 ID 位于 `data.Id`。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateAssetResponse"
+                },
+                "example": {
+                  "state": 1,
+                  "data": {
+                    "Id": "asset-20260716121500-example"
+                  },
+                  "error": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "素材参数错误或未通过上游校验。上游返回业务错误码时，网关会保留具体的 code 和 message。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "InvalidParameter.WidthTooSmall",
+                    "message": "Width must be between 300px and 6000px."
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/v3/open/GetAsset": {
+      "post": {
+        "tags": ["素材资产"],
+        "summary": "查询素材状态",
+        "operationId": "getAsset",
+        "description": "轮询单个素材的处理状态。Active 表示可用于生成，Processing 表示处理中，Failed 表示处理失败。返回的 URL 是有效期为 12 小时的临时访问地址，请及时下载并保存；后续状态查询可能返回新的临时地址。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetAssetRequest"
+              },
+              "example": {
+                "Id": "asset-20260716121500-example"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "素材信息位于 `data`。即使 HTTP 状态为 200，也应检查 `state` 是否为 1。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAssetResponse"
+                },
+                "example": {
+                  "state": 1,
+                  "data": {
+                    "Id": "asset-20260716121500-example",
+                    "Name": "virtual-person-reference",
+                    "URL": "https://tos.example.invalid/assets/asset-20260716121500-example.png?X-Tos-Expires=43200&X-Tos-Signature=example",
+                    "AssetType": "Image",
+                    "GroupId": "group-20260716121000-example",
+                    "Status": "Active",
+                    "Moderation": {
+                      "Strategy": "example-strategy"
+                    },
+                    "CreateTime": "2026-07-16T04:15:00Z",
+                    "UpdateTime": "2026-07-16T04:18:00Z"
+                  },
+                  "error": null
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "API Key",
+        "description": "Nexus Reach API Key，例如：`Authorization: Bearer sk-your-key`。"
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "请求参数错误或内容未通过校验。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "error": {
+                "message": "invalid request",
+                "type": "invalid_request_error",
+                "code": "invalid_request"
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "未提供 API Key，或 API Key 无效。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "error": {
+                "message": "invalid API key",
+                "type": "authentication_error",
+                "code": "invalid_api_key"
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "当前 API Key 无权访问该接口或资源。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "error": {
+                "message": "permission denied",
+                "type": "permission_error",
+                "code": "permission_denied"
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "请求频率超过限制，请稍后重试。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "error": {
+                "message": "rate limit exceeded",
+                "type": "rate_limit_error",
+                "code": "rate_limit_exceeded"
+              }
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "服务内部错误。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "error": {
+                "message": "internal server error",
+                "type": "server_error",
+                "code": "internal_error"
+              }
+            }
+          }
+        }
+      },
+      "UpstreamError": {
+        "description": "生成或素材服务暂时不可用，请稍后重试。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "error": {
+                "message": "service temporarily unavailable",
+                "type": "server_error",
+                "code": "service_unavailable"
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ContentMedia": {
+        "type": "object",
+        "description": "媒体对象。url 可以是符合要求的公网 URL，也可以是已处理为 Active 的素材库地址 `asset://<AssetId>`。",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "媒体地址。"
+          }
+        },
+        "required": ["url"],
+        "additionalProperties": false
+      },
+      "ContentItem": {
+        "type": "object",
+        "description": "输入内容项。type 与对应内容字段必须匹配。媒体的编号按其在 content 数组中的同类型出现顺序计算。",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["text", "image_url", "video_url", "audio_url"],
+            "description": "内容类型。"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "type=text 时必填。引用媒体时请使用“图片1、图片2、视频1”等顺序称呼，不要填写 AssetId。"
+          },
+          "image_url": {
+            "$ref": "#/components/schemas/ContentMedia"
+          },
+          "video_url": {
+            "$ref": "#/components/schemas/ContentMedia"
+          },
+          "audio_url": {
+            "$ref": "#/components/schemas/ContentMedia"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "reference_image",
+              "first_frame",
+              "reference_video",
+              "reference_audio"
+            ],
+            "description": "媒体语义角色；仅在相应输入模式需要时填写。"
+          }
+        },
+        "oneOf": [
+          {
+            "required": ["type", "text"],
+            "properties": { "type": { "enum": ["text"] } }
+          },
+          {
+            "required": ["type", "image_url"],
+            "properties": { "type": { "enum": ["image_url"] } }
+          },
+          {
+            "required": ["type", "video_url"],
+            "properties": { "type": { "enum": ["video_url"] } }
+          },
+          {
+            "required": ["type", "audio_url"],
+            "properties": { "type": { "enum": ["audio_url"] } }
+          }
+        ]
+      },
+      "VideoGenerationRequest": {
+        "type": "object",
+        "description": "必须提供 content，或使用 prompt/image/images 简写字段提供至少一种文本、图片或视频输入；音频不能作为唯一输入。",
+        "properties": {
+          "model": {
+            "type": "string",
+            "enum": ["doubao-seedance-2-0-260128"],
+            "default": "doubao-seedance-2-0-260128",
+            "description": "模型名称。"
+          },
+          "content": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/ContentItem"
+            },
+            "description": "主要输入内容。最多 9 张图片、3 个视频、3 个音频；音频不能单独作为输入。"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "提示词简写。引用媒体时使用“图片1、视频1”等顺序称呼，不要直接填写 AssetId。"
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1,
+            "description": "单张图片地址简写。"
+          },
+          "images": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 9,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "多张图片地址简写，最多 9 张。"
+          },
+          "audio_status": {
+            "type": "integer",
+            "enum": [0, 1],
+            "default": 1,
+            "description": "1 自动生成匹配人声、音效和背景音乐；0 生成无声视频。有声视频统一为单声道。"
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "description": "audio_status 的布尔别名。"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": ["720p", "1080p"],
+            "default": "720p",
+            "description": "输出分辨率。4K 需渠道单独开通，且尚未完成端到端验证，因此当前不作为公开可用枚举。"
+          },
+          "ratio": {
+            "type": "string",
+            "enum": ["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"],
+            "default": "adaptive",
+            "description": "输出宽高比。"
+          },
+          "dur": {
+            "type": "integer",
+            "default": 5,
+            "description": "输出秒数。支持 4～15 的整数；-1 表示由模型在 4～15 秒内决定。",
+            "oneOf": [{ "enum": [-1] }, { "minimum": 4, "maximum": 15 }]
+          }
+        },
+        "required": ["model"],
+        "anyOf": [
+          { "required": ["content"] },
+          { "required": ["prompt"] },
+          { "required": ["image"] },
+          { "required": ["images"] }
+        ]
+      },
+      "VideoSubmitResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "公开任务 ID。"
+          },
+          "task_id": {
+            "type": "string",
+            "description": "兼容任务 ID 字段，与 id 相同。"
+          },
+          "object": {
+            "type": "string",
+            "enum": ["video"]
+          },
+          "model": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "in_progress", "completed", "failed"]
+          },
+          "progress": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "created_at": {
+            "type": "integer",
+            "description": "Unix 时间戳。"
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "object",
+          "model",
+          "status",
+          "progress",
+          "created_at"
+        ]
+      },
+      "TaskFetchResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["success"]
+          },
+          "data": {
+            "$ref": "#/components/schemas/TaskData"
+          }
+        },
+        "required": ["code", "data"]
+      },
+      "TaskData": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "NOT_START",
+              "SUBMITTED",
+              "QUEUED",
+              "IN_PROGRESS",
+              "SUCCESS",
+              "FAILURE",
+              "UNKNOWN"
+            ],
+            "description": "任务状态。遇到 UNKNOWN 时建议稍后重试查询。"
+          },
+          "fail_reason": {
+            "type": "string",
+            "description": "失败原因；非失败状态通常为空字符串。"
+          },
+          "result_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "description": "成功后返回的临时视频下载地址。地址具有时效性，请立即下载并保存。"
+          },
+          "submit_time": {
+            "type": "integer",
+            "description": "提交时间，Unix 时间戳。"
+          },
+          "start_time": {
+            "type": "integer",
+            "nullable": true,
+            "description": "开始处理时间，Unix 时间戳。"
+          },
+          "finish_time": {
+            "type": "integer",
+            "nullable": true,
+            "description": "完成时间，Unix 时间戳。"
+          },
+          "progress": {
+            "type": "string",
+            "description": "百分比进度，例如 100%。"
+          }
+        },
+        "required": [
+          "task_id",
+          "status",
+          "fail_reason",
+          "result_url",
+          "submit_time",
+          "start_time",
+          "finish_time",
+          "progress"
+        ]
+      },
+      "CreateVisualValidateSessionRequest": {
+        "type": "object",
+        "properties": {
+          "CallbackURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "认证完成后跳转的公网 HTTPS 地址。"
+          }
+        },
+        "required": ["CallbackURL"],
+        "additionalProperties": false
+      },
+      "CreateVisualValidateSessionResponse": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "1 表示业务成功，0 表示业务失败。"
+          },
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "ResponseMetadata": {
+                "type": "object",
+                "description": "认证服务响应元数据。"
+              },
+              "Result": {
+                "type": "object",
+                "properties": {
+                  "BytedToken": {
+                    "type": "string",
+                    "description": "认证会话的一次性凭证，有效期 120 秒。"
+                  },
+                  "H5Link": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "一次性真人认证页面地址，有效期 120 秒，使用后立即失效。"
+                  },
+                  "CallbackURL": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": ["BytedToken", "H5Link", "CallbackURL"]
+              }
+            },
+            "required": ["ResponseMetadata", "Result"]
+          },
+          "error": {
+            "$ref": "#/components/schemas/BusinessErrorMessages"
+          }
+        },
+        "required": ["state", "data", "error"]
+      },
+      "GetVisualValidateResultRequest": {
+        "type": "object",
+        "properties": {
+          "BytedToken": {
+            "type": "string",
+            "minLength": 1,
+            "description": "认证会话返回的一次性凭证，有效期 120 秒。"
+          }
+        },
+        "required": ["BytedToken"],
+        "additionalProperties": false
+      },
+      "GetVisualValidateResultResponse": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "1 表示业务成功，0 表示业务失败。"
+          },
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "GroupId": {
+                "type": "string",
+                "description": "认证流程自动创建的素材组 ID。"
+              }
+            },
+            "required": ["GroupId"]
+          },
+          "error": {
+            "$ref": "#/components/schemas/BusinessErrorMessages"
+          }
+        },
+        "required": ["state", "data", "error"]
+      },
+      "CreateAssetGroupRequest": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "素材组名称，最多 64 个字符。"
+          },
+          "Description": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "素材组描述，最多 300 个字符。"
+          }
+        },
+        "required": ["Name"],
+        "additionalProperties": false
+      },
+      "CreateAssetGroupResponse": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "1 表示业务成功，0 表示业务失败。"
+          },
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "Id": {
+                "type": "string",
+                "description": "素材组 ID。"
+              }
+            },
+            "required": ["Id"]
+          },
+          "error": {
+            "$ref": "#/components/schemas/BusinessErrorMessages"
+          }
+        },
+        "required": ["state", "data", "error"]
+      },
+      "CreateAssetRequest": {
+        "type": "object",
+        "properties": {
+          "GroupId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "归属素材组 ID。"
+          },
+          "URL": {
+            "type": "string",
+            "format": "uri",
+            "description": "素材公网直链，不支持 Base64。文档示例为不可访问的占位 URL，必须替换为自己的地址。文件必须满足接口描述中的格式、尺寸、时长和大小限制。"
+          },
+          "Name": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "素材名称，最多 64 个字符，仅用于搜索，不参与模型推理。"
+          },
+          "AssetType": {
+            "type": "string",
+            "enum": ["Image", "Video", "Audio"],
+            "description": "素材类型。"
+          }
+        },
+        "required": ["GroupId", "URL", "AssetType"],
+        "additionalProperties": false
+      },
+      "CreateAssetResponse": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "1 表示业务成功，0 表示业务失败。"
+          },
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "Id": {
+                "type": "string",
+                "description": "素材 ID。"
+              }
+            },
+            "required": ["Id"]
+          },
+          "error": {
+            "$ref": "#/components/schemas/BusinessErrorMessages"
+          }
+        },
+        "required": ["state", "data", "error"]
+      },
+      "GetAssetRequest": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "素材 ID。"
+          }
+        },
+        "required": ["Id"],
+        "additionalProperties": false
+      },
+      "BusinessErrorMessages": {
+        "type": "array",
+        "nullable": true,
+        "items": {
+          "type": "string"
+        },
+        "description": "业务失败时的错误消息数组；成功时为 null。"
+      },
+      "GetAssetResponse": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "1 表示业务成功，0 表示业务失败。"
+          },
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "Id": {
+                "type": "string"
+              },
+              "Name": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "URL": {
+                "type": "string",
+                "format": "uri",
+                "description": "有效期为 12 小时的临时签名素材地址，请及时下载并保存。"
+              },
+              "AssetType": {
+                "type": "string",
+                "enum": ["Image", "Video", "Audio"]
+              },
+              "GroupId": {
+                "type": "string"
+              },
+              "Status": {
+                "type": "string",
+                "enum": ["Active", "Processing", "Failed"],
+                "description": "Active 可用于视频生成；Processing 仍在处理；Failed 表示处理失败。"
+              },
+              "Moderation": {
+                "type": "object",
+                "properties": {
+                  "Strategy": {
+                    "type": "string",
+                    "description": "本次素材审核使用的策略标识。"
+                  }
+                },
+                "required": ["Strategy"]
+              },
+              "Error": {
+                "type": "object",
+                "nullable": true,
+                "properties": {
+                  "Code": {
+                    "type": "string",
+                    "description": "素材处理失败时的错误码。"
+                  },
+                  "Message": {
+                    "type": "string",
+                    "description": "素材处理失败时的错误说明。"
+                  }
+                }
+              },
+              "CreateTime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "素材创建时间，ISO 8601 UTC。"
+              },
+              "UpdateTime": {
+                "type": "string",
+                "format": "date-time",
+                "description": "素材状态更新时间，ISO 8601 UTC。"
+              }
+            },
+            "required": ["Id", "URL", "AssetType", "GroupId", "Status"]
+          },
+          "error": {
+            "$ref": "#/components/schemas/BusinessErrorMessages"
+          }
+        },
+        "required": ["state", "data", "error"]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": ["message", "code"]
+          }
+        },
+        "required": ["error"]
+      }
+    }
+  }
+}
