@@ -386,6 +386,21 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(_ *model.Task, _ *relaycommon.Task
 	return 0
 }
 
+func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
+	if task == nil {
+		return nil, fmt.Errorf("task is required")
+	}
+	video := task.ToOpenAIVideo()
+	video.TaskID = task.TaskID
+	if task.Status == model.TaskStatusFailure {
+		video.Error = &dto.OpenAIVideoError{
+			Code:    "generation_failed",
+			Message: task.FailReason,
+		}
+	}
+	return common.Marshal(video)
+}
+
 func (a *TaskAdaptor) SanitizeTaskData(task *model.Task, responseBody []byte) ([]byte, error) {
 	if task == nil {
 		return nil, fmt.Errorf("task is required to sanitize provider data")

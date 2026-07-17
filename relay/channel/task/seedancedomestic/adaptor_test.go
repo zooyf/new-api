@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -271,6 +272,34 @@ func TestDomesticAdaptorSanitizesPolledProviderTaskID(t *testing.T) {
 	assert.NotContains(t, string(data), "1200")
 	assert.Contains(t, string(data), "task_public")
 	assert.Contains(t, string(data), "https://example.com/video.mp4")
+}
+
+func TestDomesticAdaptorConvertsStoredTaskToOpenAIVideo(t *testing.T) {
+	task := &model.Task{
+		TaskID:     "task_public",
+		Status:     model.TaskStatusSuccess,
+		Progress:   "100%",
+		CreatedAt:  100,
+		UpdatedAt:  200,
+		Properties: model.Properties{OriginModelName: "doubao-seedance-2-0-260128"},
+		PrivateData: model.TaskPrivateData{
+			UpstreamTaskID: "1200",
+			ResultURL:      "https://example.com/result.mp4",
+		},
+	}
+
+	data, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
+
+	require.NoError(t, err)
+	var video dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(data, &video))
+	assert.Equal(t, "task_public", video.ID)
+	assert.Equal(t, "task_public", video.TaskID)
+	assert.Equal(t, dto.VideoStatusCompleted, video.Status)
+	assert.Equal(t, 100, video.Progress)
+	assert.Equal(t, "doubao-seedance-2-0-260128", video.Model)
+	assert.Equal(t, "https://example.com/result.mp4", video.Metadata["url"])
+	assert.NotContains(t, string(data), "1200")
 }
 
 func TestDomesticAdaptorSnapshotsPollingEndpoint(t *testing.T) {
