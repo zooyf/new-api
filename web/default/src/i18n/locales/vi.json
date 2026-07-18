@@ -3859,6 +3859,7 @@
     "Response": "Phản hồi",
     "Response body": "Nội dung phản hồi",
     "Response example": "Ví dụ phản hồi",
+    "Response headers": "Tiêu đề phản hồi",
     "Response Time": "Thời gian phản hồi",
     "Response time: {{duration}}": "Thời gian phản hồi: {{duration}}",
     "Responses": "Phản hồi",

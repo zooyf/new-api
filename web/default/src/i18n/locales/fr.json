@@ -3859,6 +3859,7 @@
     "Response": "Réponse",
     "Response body": "Corps de la réponse",
     "Response example": "Exemple de réponse",
+    "Response headers": "En-têtes de réponse",
     "Response Time": "Temps de réponse",
     "Response time: {{duration}}": "Temps de réponse : {{duration}}",
     "Responses": "Réponses",

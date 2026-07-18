@@ -53,6 +53,14 @@ export interface OpenApiParameter {
   schema?: OpenApiSchema
 }
 
+export interface OpenApiHeader {
+  description?: string
+  required?: boolean
+  deprecated?: boolean
+  example?: unknown
+  schema?: OpenApiSchema
+}
+
 export interface OpenApiOperation {
   tags?: string[]
   summary?: string
@@ -66,7 +74,11 @@ export interface OpenApiOperation {
   }
   responses?: Record<
     string,
-    { description?: string; content?: Record<string, OpenApiMediaType> }
+    {
+      description?: string
+      headers?: Record<string, OpenApiHeader>
+      content?: Record<string, OpenApiMediaType>
+    }
   >
 }
 
@@ -133,6 +145,7 @@ export interface DocEndpoint {
   requestExample: unknown
   responseContentType: string
   responseStatusCodes: string[]
+  responseHeaders: OpenApiParameter[]
   responseSchema?: OpenApiSchema
   responseSchemaDescription: string
   responseFields: DocField[]

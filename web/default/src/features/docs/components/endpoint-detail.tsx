@@ -366,6 +366,11 @@ export function EndpointDetail({ doc, endpoint }: EndpointDetailProps) {
           schemaDescription={endpoint.responseSchemaDescription}
           fields={endpoint.responseFields}
         />
+        <ParameterTable
+          title={t('Response headers')}
+          spec={spec}
+          parameters={endpoint.responseHeaders}
+        />
       </div>
     </article>
   )

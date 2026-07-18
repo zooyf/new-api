@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Nexus Reach Seedance 2.0 API",
-    "version": "2026-07-18",
-    "description": "Seedance 2.0 国内视频生成与素材资产接口。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。"
+    "version": "2026-07-18.2",
+    "description": "Seedance 2.0 国内视频生成与素材资产接口。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。视频创建、状态查询、完整下载、Range 下载以及素材组/素材主流程已于 2026-07-18 通过公网 IP HTTPS 入口完成端到端验证；真人认证成功路径需要用户在 120 秒内完成人工活体认证，因此不属于自动化验证范围。`ListSplitBillDetail` 仅供网关内部结算使用，不是对外 API。"
   },
   "servers": [
     {
@@ -31,7 +31,7 @@
     },
     {
       "name": "素材资产",
-      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。CreateAsset 是异步接口，创建素材后需轮询 GetAsset；只有 Status 为 Active 的素材才能通过 `asset://<AssetId>` 用于视频生成。素材必须拥有完整合法的使用权，不得包含未授权商标、标识或真实自然人肖像，不得侵犯第三方人格权或知识产权，并应符合适用法律法规。素材入库仅支持合规的虚拟或仿真人物资产；依法授权的真人素材应先完成真人认证流程。"
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。CreateAsset 是异步接口，创建素材后需轮询 GetAsset；只有 Status 为 Active 的素材才能通过 `asset://<AssetId>` 用于视频生成。素材与真人认证接口的业务失败可能仍返回 HTTP 200，调用方必须同时检查 `state === 1`、`data` 非空且 `error === null`，不能只判断 HTTP 状态。素材必须拥有完整合法的使用权，不得包含未授权商标、标识或真实自然人肖像，不得侵犯第三方人格权或知识产权，并应符合适用法律法规。素材入库仅支持合规的虚拟或仿真人物资产；依法授权的真人素材应先完成真人认证流程。"
     }
   ],
   "paths": {
@@ -106,7 +106,7 @@
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/VideoUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "413": {
@@ -191,7 +191,7 @@
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/VideoUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "500": { "$ref": "#/components/responses/InternalError" },
           "503": {
@@ -259,7 +259,7 @@
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/VideoUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "500": { "$ref": "#/components/responses/InternalError" },
           "503": {
@@ -291,11 +291,39 @@
               "type": "string"
             },
             "example": "task_01jzseedanceexample"
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "description": "可选的字节范围，例如 `bytes=0-1023`。网关会转发给上游视频资源；支持时返回 HTTP 206。",
+            "schema": {
+              "type": "string"
+            },
+            "example": "bytes=0-1023"
+          },
+          {
+            "name": "If-Range",
+            "in": "header",
+            "required": false,
+            "description": "可选的 Range 条件请求值，网关会原样转发给上游视频资源。",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
             "description": "视频文件流。Content-Type 通常为 video/mp4，以实际响应头为准。",
+            "headers": {
+              "Cache-Control": {
+                "description": "固定为 `private, no-store`，禁止共享缓存保存客户视频。",
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              }
+            },
             "content": {
               "video/mp4": {
                 "schema": {
@@ -319,6 +347,29 @@
           },
           "206": {
             "description": "Range 请求返回的部分视频内容，并保留 Content-Range、Accept-Ranges 等上游响应头。",
+            "headers": {
+              "Cache-Control": {
+                "description": "固定为 `private, no-store`，禁止共享缓存保存客户视频。",
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              },
+              "Content-Range": {
+                "description": "本次返回的字节范围以及完整文件大小。",
+                "schema": {
+                  "type": "string",
+                  "example": "bytes 0-1023/1684544"
+                }
+              },
+              "Accept-Ranges": {
+                "description": "上游支持的范围单位，通常为 `bytes`。",
+                "schema": {
+                  "type": "string",
+                  "example": "bytes"
+                }
+              }
+            },
             "content": {
               "video/mp4": {
                 "schema": {
@@ -350,7 +401,7 @@
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/VideoUnauthorized" },
           "403": {
             "description": "视频资源地址被安全策略拒绝。",
             "content": {
@@ -415,29 +466,42 @@
         },
         "responses": {
           "200": {
-            "description": "认证会话创建成功。业务结果位于 `data.Result`。",
+            "description": "业务成功时结果位于 `data.Result`。上游业务校验失败时 HTTP 状态仍可能为 200，应同时检查 `state`、`data` 和 `error`。",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreateVisualValidateSessionResponse"
                 },
-                "example": {
-                  "state": 1,
-                  "data": {
-                    "ResponseMetadata": {},
-                    "Result": {
-                      "BytedToken": "20260716120000-example-token",
-                      "H5Link": "https://verify.example.invalid/session?bytedToken=20260716120000-example-token&lng=zh",
-                      "CallbackURL": "https://124.174.0.221/apidocs/apidocs-example-callback.html"
+                "examples": {
+                  "success": {
+                    "summary": "认证会话创建成功",
+                    "value": {
+                      "state": 1,
+                      "data": {
+                        "ResponseMetadata": {},
+                        "Result": {
+                          "BytedToken": "20260716120000-example-token",
+                          "H5Link": "https://verify.example.invalid/session?bytedToken=20260716120000-example-token&lng=zh",
+                          "CallbackURL": "https://124.174.0.221/apidocs/apidocs-example-callback.html"
+                        }
+                      },
+                      "error": null
                     }
                   },
-                  "error": null
+                  "businessError": {
+                    "summary": "业务校验失败（HTTP 200）",
+                    "value": {
+                      "state": 0,
+                      "data": null,
+                      "error": ["business validation failed"]
+                    }
+                  }
                 }
               }
             }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
@@ -472,18 +536,31 @@
                 "schema": {
                   "$ref": "#/components/schemas/GetVisualValidateResultResponse"
                 },
-                "example": {
-                  "state": 1,
-                  "data": {
-                    "GroupId": "group-20260716120500-example"
+                "examples": {
+                  "success": {
+                    "summary": "真人认证成功",
+                    "value": {
+                      "state": 1,
+                      "data": {
+                        "GroupId": "group-20260716120500-example"
+                      },
+                      "error": null
+                    }
                   },
-                  "error": null
+                  "invalidBytedToken": {
+                    "summary": "BytedToken 无效（HTTP 200）",
+                    "value": {
+                      "state": 0,
+                      "data": null,
+                      "error": ["BytedToken信息有误"]
+                    }
+                  }
                 }
               }
             }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
@@ -513,24 +590,37 @@
         },
         "responses": {
           "200": {
-            "description": "素材组创建成功。素材组 ID 位于 `data.Id`。",
+            "description": "业务成功时素材组 ID 位于 `data.Id`。上游业务校验失败时 HTTP 状态仍可能为 200，应同时检查 `state`、`data` 和 `error`。",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreateAssetGroupResponse"
                 },
-                "example": {
-                  "state": 1,
-                  "data": {
-                    "Id": "group-20260716121000-example"
+                "examples": {
+                  "success": {
+                    "summary": "素材组创建成功",
+                    "value": {
+                      "state": 1,
+                      "data": {
+                        "Id": "group-20260716121000-example"
+                      },
+                      "error": null
+                    }
                   },
-                  "error": null
+                  "businessError": {
+                    "summary": "业务校验失败（HTTP 200）",
+                    "value": {
+                      "state": 0,
+                      "data": null,
+                      "error": ["business validation failed"]
+                    }
+                  }
                 }
               }
             }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
@@ -543,7 +633,7 @@
         "tags": ["素材资产"],
         "summary": "上传素材",
         "operationId": "createAsset",
-        "description": "将公网可访问的虚拟人物图片、视频或音频加入素材组。示例 URL 是不可访问的占位地址，调用时必须替换成自己的公网直链，不支持 Base64。接口异步返回 AssetId，随后必须轮询 GetAsset，直到 Status 为 Active。\n\n素材约束：\n\n- Image：jpeg、png、webp、bmp、tiff、gif、heic、heif；宽高均为 300～6000 px；宽高比 0.4～2.5；不超过 30 MB。\n- Video：mp4、mov；仅 480p 或 720p；2～15 秒；24～60 FPS；宽高均为 300～6000 px；宽高比 0.4～2.5；总像素 409,600～927,408；不超过 50 MB。\n- Audio：wav、mp3；2～15 秒；不超过 15 MB。",
+        "description": "将公网可访问的虚拟人物图片、视频或音频加入素材组。示例 URL 是不可访问的占位地址，调用时必须替换成自己的公网直链，不支持 Base64。接口异步返回 AssetId，随后必须轮询 GetAsset，直到 Status 为 Active。该接口已知的上游业务错误会由网关规范化为 HTTP 400，并保留具体 `error.code` 和 `error.message`；HTTP 200 表示请求已被接受，但客户端仍应确认 `state === 1`。\n\n素材约束：\n\n- Image：jpeg、png、webp、bmp、tiff、gif、heic、heif；宽高均为 300～6000 px；宽高比 0.4～2.5；不超过 30 MB。\n- Video：mp4、mov；仅 480p 或 720p；2～15 秒；24～60 FPS；宽高均为 300～6000 px；宽高比 0.4～2.5；总像素 409,600～927,408；不超过 50 MB。\n- Audio：wav、mp3；2～15 秒；不超过 15 MB。",
         "requestBody": {
           "required": true,
           "content": {
@@ -563,6 +653,15 @@
         "responses": {
           "200": {
             "description": "素材已进入异步处理队列。素材 ID 位于 `data.Id`。",
+            "headers": {
+              "X-New-Api-Asset-Namespace": {
+                "description": "网关写入的素材命名空间标识。当前国内 Seedance 素材返回 `seedance-domestic`；客户端不应把它当作素材 ID。",
+                "schema": {
+                  "type": "string",
+                  "example": "seedance-domestic"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -594,7 +693,7 @@
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
@@ -629,28 +728,42 @@
                 "schema": {
                   "$ref": "#/components/schemas/GetAssetResponse"
                 },
-                "example": {
-                  "state": 1,
-                  "data": {
-                    "Id": "asset-20260716121500-example",
-                    "Name": "virtual-person-reference",
-                    "URL": "https://tos.example.invalid/assets/asset-20260716121500-example.png?X-Tos-Expires=43200&X-Tos-Signature=example",
-                    "AssetType": "Image",
-                    "GroupId": "group-20260716121000-example",
-                    "Status": "Active",
-                    "Moderation": {
-                      "Strategy": "example-strategy"
-                    },
-                    "CreateTime": "2026-07-16T04:15:00Z",
-                    "UpdateTime": "2026-07-16T04:18:00Z"
+                "examples": {
+                  "success": {
+                    "summary": "素材可用",
+                    "value": {
+                      "state": 1,
+                      "data": {
+                        "Id": "asset-20260716121500-example",
+                        "Name": "virtual-person-reference",
+                        "URL": "https://tos.example.invalid/assets/asset-20260716121500-example.png?X-Tos-Expires=43200&X-Tos-Signature=example",
+                        "AssetType": "Image",
+                        "GroupId": "group-20260716121000-example",
+                        "Status": "Active",
+                        "Moderation": {
+                          "Strategy": "example-strategy"
+                        },
+                        "CreateTime": "2026-07-16T04:15:00Z",
+                        "UpdateTime": "2026-07-16T04:18:00Z",
+                        "ProjectName": "example-project"
+                      },
+                      "error": null
+                    }
                   },
-                  "error": null
+                  "businessError": {
+                    "summary": "业务查询失败（HTTP 200）",
+                    "value": {
+                      "state": 0,
+                      "data": null,
+                      "error": ["asset not found"]
+                    }
+                  }
                 }
               }
             }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
@@ -684,16 +797,44 @@
           }
         }
       },
-      "Unauthorized": {
-        "description": "未提供 API Key，或 API Key 无效。",
+      "VideoUnauthorized": {
+        "description": "视频接口未提供 Token，或 Token 无效。调用方应以 HTTP 401 判定鉴权失败；`request id` 仅用于问题排查。",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorResponse" },
             "example": {
               "error": {
-                "message": "invalid API key",
-                "type": "authentication_error",
-                "code": "invalid_api_key"
+                "message": "Invalid token (request id: example-request-id)",
+                "type": "new_api_error",
+                "code": ""
+              }
+            }
+          }
+        }
+      },
+      "AssetUnauthorized": {
+        "description": "真人认证或素材接口未提供 API Key，或 API Key 无效。调用方应以 HTTP 401 判定鉴权失败，并可根据 `error.code` 区分缺少 Key 与无效 Key；不要解析 `error.message` 文本。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "missingApiKey": {
+                "summary": "未提供 API Key",
+                "value": {
+                  "error": {
+                    "message": "missing api key",
+                    "code": "token_not_provided"
+                  }
+                }
+              },
+              "invalidApiKey": {
+                "summary": "API Key 无效",
+                "value": {
+                  "error": {
+                    "message": "invalid api key",
+                    "code": "token_invalid"
+                  }
+                }
               }
             }
           }
@@ -1383,6 +1524,10 @@
                 "type": "string",
                 "format": "date-time",
                 "description": "素材状态更新时间，ISO 8601 UTC。"
+              },
+              "ProjectName": {
+                "type": "string",
+                "description": "供应商侧项目名称；该字段可能随渠道配置变化，客户端不应依赖固定值。"
               }
             },
             "required": ["Id", "AssetType", "GroupId", "Status"]

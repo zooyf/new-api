@@ -25,6 +25,7 @@ import type {
   DocSource,
   OpenApiMediaType,
   OpenApiOperation,
+  OpenApiParameter,
   OpenApiSchema,
   OpenApiSpec,
 } from '../types'
@@ -282,9 +283,29 @@ function extractResponse(spec: OpenApiSpec, operation: OpenApiOperation) {
   const schema = media.schema
   const resolved = resolveSchema(spec, schema)
   const example = media.example ?? firstExample(media)
+  const headers: OpenApiParameter[] = []
+  const headerNames = new Set<string>()
+  for (const [statusCode, responseItem] of Object.entries(responses)) {
+    if (!/^2\d\d$/.test(statusCode)) continue
+    for (const [name, header] of Object.entries(responseItem.headers ?? {})) {
+      const normalizedName = name.toLowerCase()
+      if (headerNames.has(normalizedName)) continue
+      headerNames.add(normalizedName)
+      headers.push({
+        name,
+        in: 'header' as const,
+        description: header.description,
+        required: header.required,
+        deprecated: header.deprecated,
+        example: header.example,
+        schema: header.schema,
+      })
+    }
+  }
   return {
     contentType,
     statusCodes,
+    headers,
     schema,
     schemaDescription: normalizeText(resolved.description ?? ''),
     fields: extractFields(spec, schema),
@@ -320,6 +341,12 @@ function buildCurl(
     `curl --location -X ${method.toUpperCase()} '${baseUrl}${examplePath}'`,
     "  --header 'Authorization: Bearer sk-your-key'",
   ]
+  for (const parameter of parameters ?? []) {
+    if (parameter.in !== 'header') continue
+    const parameterExample = parameter.example ?? parameter.schema?.example
+    if (parameterExample === undefined) continue
+    lines.push(`  --header '${parameter.name}: ${String(parameterExample)}'`)
+  }
   if (hasBody) {
     lines.push(`  --header 'Content-Type: ${contentType}'`)
     lines.push(`  --data '${data.replaceAll("'", "'\\''")}'`)
@@ -353,6 +380,7 @@ function buildEndpoint(
     ...(operation.parameters ?? []).map((param) => param.name),
     ...request.fields.map((field) => field.name),
     ...response.fields.map((field) => field.name),
+    ...response.headers.map((header) => header.name),
   ]
 
   return {
@@ -373,6 +401,7 @@ function buildEndpoint(
     requestExample: request.example,
     responseContentType: response.contentType,
     responseStatusCodes: response.statusCodes,
+    responseHeaders: response.headers,
     responseSchema: response.schema,
     responseSchemaDescription: response.schemaDescription,
     responseFields: response.fields,

@@ -3859,6 +3859,7 @@
     "Response": "响应",
     "Response body": "响应体",
     "Response example": "响应示例",
+    "Response headers": "响应头",
     "Response Time": "响应时间",
     "Response time: {{duration}}": "响应时间：{{duration}}",
     "Responses": "响应",

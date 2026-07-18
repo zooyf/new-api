@@ -508,6 +508,9 @@ func writeJSONError(w http.ResponseWriter, status int, code string, message stri
 
 func copyHeader(dst http.Header, src http.Header) {
 	for key, values := range src {
+		if strings.EqualFold(key, "Set-Cookie") {
+			continue
+		}
 		for _, value := range values {
 			dst.Add(key, value)
 		}

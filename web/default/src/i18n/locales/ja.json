@@ -3859,6 +3859,7 @@
     "Response": "レスポンス",
     "Response body": "レスポンス本文",
     "Response example": "レスポンス例",
+    "Response headers": "レスポンスヘッダー",
     "Response Time": "応答時間",
     "Response time: {{duration}}": "応答時間: {{duration}}",
     "Responses": "レスポンス",

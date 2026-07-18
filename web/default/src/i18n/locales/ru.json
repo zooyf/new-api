@@ -3859,6 +3859,7 @@
     "Response": "Ответ",
     "Response body": "Тело ответа",
     "Response example": "Пример ответа",
+    "Response headers": "Заголовки ответа",
     "Response Time": "Время ответа",
     "Response time: {{duration}}": "Время ответа: {{duration}}",
     "Responses": "Ответы",

@@ -87,6 +87,8 @@ func TestProxyPassesThroughAllowedRequest(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Upstream-Trace", "trace-1")
+		w.Header().Add("Set-Cookie", "PHPSESSID=upstream-session; Path=/; HttpOnly")
+		w.Header().Add("Set-Cookie", "supplier-preference=value; Path=/")
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
@@ -113,6 +115,7 @@ func TestProxyPassesThroughAllowedRequest(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, resp.Code)
 	assert.Equal(t, "application/json", resp.Header().Get("Content-Type"))
 	assert.Equal(t, "trace-1", resp.Header().Get("X-Upstream-Trace"))
+	assert.Empty(t, resp.Header().Values("Set-Cookie"))
 	assert.JSONEq(t, `{"ok":true}`, resp.Body.String())
 }
 
@@ -251,6 +254,7 @@ func TestProxyClassifiesAffinityResponses(t *testing.T) {
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Add("Set-Cookie", "PHPSESSID=upstream-session; Path=/; HttpOnly")
 		switch r.URL.Path {
 		case "/business-error":
 			_, _ = w.Write([]byte(`{"state":1,"data":{"Code":"InvalidParameter.WidthTooSmall","Message":"Width must be between 300px and 6000px.","Data":null},"error":null}`))
@@ -334,6 +338,7 @@ func TestProxyClassifiesAffinityResponses(t *testing.T) {
 			assert.JSONEq(t, tt.body, resp.Body.String())
 			assert.Equal(t, tt.upstreamTrace, resp.Header().Get("X-Upstream-Trace"))
 			assert.Equal(t, tt.namespaceHeader, resp.Header().Get("X-New-Api-Asset-Namespace"))
+			assert.Empty(t, resp.Header().Values("Set-Cookie"))
 
 			var count int64
 			require.NoError(t, model.DB.Model(&model.AssetChannelBinding{}).Count(&count).Error)

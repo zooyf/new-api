@@ -3859,6 +3859,7 @@
     "Response": "回應",
     "Response body": "回應本文",
     "Response example": "回應範例",
+    "Response headers": "回應標頭",
     "Response Time": "回應時間",
     "Response time: {{duration}}": "回應時間：{{duration}}",
     "Responses": "回應",
