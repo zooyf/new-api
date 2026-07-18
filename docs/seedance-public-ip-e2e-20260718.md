@@ -472,4 +472,6 @@ POST https://api.laomandi.com/asset/SdToolApi/ListSplitBillDetail
 
 公网 IP HTTPS 入口已能完整承载本文件列出的 9 个 Seedance 国内客户契约 API。服务器还保留供其他供应商使用的通用 new-api 路由，例如 `POST /v1/videos` 和 `POST /v1/videos/{video_id}/remix`；它们不属于国内 Seedance 特殊格式契约，也不应据此推断国内 Seedance 支持 OpenAI/Sora multipart 创建协议。客户可使用素材库图片创建视频，轮询国内格式或 OpenAI 兼容格式的任务状态，并通过网关代理完整或分段下载结果。
 
-当前唯一未完成的成功路径是必须由真人交互的活体认证结果获取。若需要把该分支也标记为端到端通过，测试人员需在创建会话后的 120 秒内打开 H5Link、完成人工认证，并立即用回调返回的 BytedToken 调用 `GetVisualValidateResult`；该步骤不会生成视频费用。
+当前唯一未完成的成功路径是必须由真人交互的活体认证结果获取。若需要把该分支也标记为端到端通过，测试人员需在创建会话后的 120 秒内打开 H5Link、完成人工认证，并立即使用创建响应中仅保留在内存的原始 BytedToken 调用 `GetVisualValidateResult`；该步骤不会生成视频费用。
+
+已新增 `scripts/test-seedance-visual-validation-e2e.ps1` 作为该分支的交互式验证工具。其零费用 `-PreflightOnly` 模式已通过，确认公网回调安全头和无效 BytedToken 契约正常，且没有创建活体会话、素材或视频。实际成功模式要求显式传入 `-AuthorizedPersonReady`，只在进程内存保留创建响应中的 BytedToken 和 H5Link；Edge InPrivate 通过只含随机路径的一次性本机回环导航桥打开 H5Link，浏览器进程命令行不携带供应商 URL 或凭证。授权人员确认回调成功后，脚本才调用结果接口；持久化证据只记录 GroupId 存在性和字符长度，不保存值、预览或哈希。该成功模式尚未在没有授权真人准备好的情况下执行，因此预检不能替代真人成功分支的实际端到端证据。

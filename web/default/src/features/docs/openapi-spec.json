@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Nexus Reach Seedance 2.0 API",
-    "version": "2026-07-18.3",
+    "version": "2026-07-19.1",
     "description": "Seedance 2.0 国内视频生成与素材资产接口。本 OpenAPI 文件列出的 9 个 paths 构成 Seedance 国内客户契约；网关为其他供应商保留的通用 new-api 路由不属于本契约。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。视频创建、状态查询、完整下载、Range 下载以及素材组/素材主流程已于 2026-07-18 通过公网 IP HTTPS 入口完成端到端验证；真人认证成功路径需要用户在 120 秒内完成人工活体认证，因此不属于自动化验证范围。`ListSplitBillDetail` 仅供网关内部结算使用，不是对外 API。"
   },
   "servers": [
@@ -23,11 +23,11 @@
   "tags": [
     {
       "name": "视频生成",
-      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。国内 Seedance 的推荐调用顺序为：`POST /v1/video/generations` 创建任务，`GET /v1/video/generations/{task_id}` 轮询状态，任务成功后通过 `GET /v1/videos/{task_id}/content` 下载视频。`GET /v1/videos/{task_id}` 仅作为 OpenAI 格式的查询别名；OpenAI/Sora 的 `POST /v1/videos` multipart 创建协议不属于本接口契约，请勿混用。视频生成通常需要数分钟，视频文件依赖上游临时资源，请及时下载并保存。提交任务时会按请求规格预扣估算额度；任务成功且供应商账单可查询后，系统使用最终 `total_tokens` 自动补扣或退回差额。查询和下载接口不会重复收取生成费用。\n\n人民币基础报价（单位：元/百万 tokens）：\n\n| 分辨率 | 无输入视频 | 含输入视频 |\n| --- | ---: | ---: |\n| 720p | ¥46 | ¥28 |\n| 1080p | ¥51 | ¥31 |\n| 4K | ¥26（计划价） | ¥16（计划价） |\n\n费用公式：`实际费用（人民币）= 最终 total_tokens ÷ 1,000,000 × 对应人民币单价`。例如，720p 无输入视频任务最终使用 87,277 tokens，则费用为 `87,277 ÷ 1,000,000 × ¥46 = ¥4.014742`。仅成功任务按最终实际用量结算；如商务合同另有约定，以合同为准。4K 需要单独确认渠道已开通，且当前尚未完成端到端验证，因此暂不在 `resolution` 的公开可用枚举中。"
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。本 Seedance 国内客户契约的调用顺序为：`POST /v1/video/generations` 创建任务，`GET /v1/video/generations/{task_id}` 轮询状态，任务成功后通过 `GET /v1/videos/{task_id}/content` 下载视频。\n\n接口区别：\n\n| 接口 | 用途 | 是否属于国内 Seedance 客户契约 |\n| --- | --- | --- |\n| `POST /v1/video/generations` | 使用国内特殊 JSON 格式创建任务 | 是，唯一创建入口 |\n| `GET /v1/video/generations/{task_id}` | 返回国内格式任务状态 | 是，推荐轮询入口 |\n| `GET /v1/videos/{task_id}` | 将同一任务转换为 OpenAI Video 格式查询 | 是，仅为查询兼容别名 |\n| `GET /v1/videos/{task_id}/content` | 由 Nexus Reach 网关代理下载生成结果 | 是，但不是上游供应商接口 |\n| `POST /v1/videos` | OpenAI/Sora multipart 创建协议 | 否，请勿用于国内 Seedance |\n\n两种查询接口使用同一个公开 `task_id`，只是响应结构和状态枚举不同，不会创建第二个任务，也不会重复计费。查询读取 Nexus Reach 网关中由后台异步轮询更新的任务记录；建议客户端每 5～10 秒查询一次，并在长时间未完成时逐步退避，不要高频请求。视频生成通常需要数分钟，视频文件依赖上游临时资源，请及时下载并保存。提交任务时会按请求规格预扣估算额度；任务成功且供应商账单可查询后，系统使用最终 `total_tokens` 自动补扣或退回差额。查询和下载接口不会重复收取生成费用。最终 `total_tokens` 和单任务最终人民币金额当前不在上述 API 响应中返回；客户可在 Nexus Reach 控制台的“使用日志”中核对账户实际扣款或退款，逐任务对账或开票以平台出具的账单为准。`ListSplitBillDetail` 仍是网关内部结算接口，不向客户开放。\n\n当前可调用的人民币基础报价（单位：元/百万 tokens）：\n\n| 分辨率 | 无输入视频 | 含输入视频 |\n| --- | ---: | ---: |\n| 720p | ¥46 | ¥28 |\n| 1080p | ¥51 | ¥31 |\n\n4K 计划参考价为无输入视频 ¥26/百万 tokens、含输入视频 ¥16/百万 tokens；但当前渠道尚未完成端到端验证，4K 不在 `resolution` 的公开可用枚举中，客户暂时不得提交生产请求。\n\n费用公式：`实际费用（人民币）= 最终 total_tokens ÷ 1,000,000 × 对应人民币单价`。例如，720p 无输入视频任务最终使用 87,277 tokens，则费用为 `87,277 ÷ 1,000,000 × ¥46 = ¥4.014742`。仅成功任务按最终实际用量结算；如商务合同另有约定，以合同为准。"
     },
     {
       "name": "真人认证",
-      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。真人认证仅用于依法授权的真人素材流程。创建会话后应立即打开 H5Link；BytedToken 和 H5Link 的有效期均为 120 秒、仅能使用一次。BytedToken 会出现在回调 URL 的查询参数中：必须使用专用 HTTPS 回调路径，对该路径禁用或脱敏服务器、CDN、WAF 的查询字符串日志，返回 `Cache-Control: no-store` 和 `Referrer-Policy: no-referrer`，并在读取后立即清除浏览器地址栏中的查询串。"
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。真人认证仅用于依法授权的本人素材流程，禁止使用录屏、合成人脸、虚拟摄像头或他人替代。创建会话后应立即打开 H5Link；BytedToken 和 H5Link 的有效期均为 120 秒、仅能使用一次。创建响应中的 `data.Result.BytedToken` 是后续获取素材组的凭证，应只保留在调用进程内存中，并且仅在回调显示 `resultCode=10000` 后调用结果接口。BytedToken 也会出现在回调 URL 的查询参数中：必须使用专用 HTTPS 回调路径，对该路径禁用或脱敏服务器、CDN、WAF 的查询字符串日志，返回 `Cache-Control: no-store` 和 `Referrer-Policy: no-referrer`，并在读取后立即清除浏览器地址栏中的查询串。"
     },
     {
       "name": "素材资产",
@@ -40,7 +40,7 @@
         "tags": ["视频生成"],
         "summary": "创建 Seedance 2.0 视频任务",
         "operationId": "createSeedanceDomesticVideo",
-        "description": "这是国内 Seedance 特殊 JSON 格式的唯一推荐创建入口，请使用 `Content-Type: application/json`，不要改用 OpenAI/Sora 的 `POST /v1/videos` multipart 协议。支持文本、图片、视频和音频组合输入。`content` 中最多包含 9 张图片、3 个视频和 3 个音频；音频不能单独作为输入。使用素材库资源时，将 `asset://<AssetId>` 写入对应媒体对象的 `url` 字段。提示词应按媒体在 `content` 中出现的顺序使用“图片1、图片2、视频1”等称呼，禁止直接在提示词中填写 AssetId。",
+        "description": "这是本 Seedance 国内客户契约的唯一创建入口，请使用 `Content-Type: application/json`，不要改用 OpenAI/Sora 的 `POST /v1/videos` multipart 协议。支持文本、图片、视频和音频组合输入。`content` 中最多包含 9 张图片、3 个视频和 3 个音频；音频不能单独作为输入。使用素材库资源时，将 `asset://<AssetId>` 写入对应媒体对象的 `url` 字段。提示词应按媒体在 `content` 中出现的顺序使用“图片1、图片2、视频1”等称呼，禁止直接在提示词中填写 AssetId。",
         "requestBody": {
           "required": true,
           "content": {
@@ -139,7 +139,7 @@
         "tags": ["视频生成"],
         "summary": "查询视频任务",
         "operationId": "getSeedanceDomesticVideo",
-        "description": "这是国内 Seedance 的推荐轮询入口。使用创建接口返回的 `task_id` 查询状态：`SUCCESS` 表示完成，`FAILURE` 表示失败，`UNKNOWN` 表示暂时无法确认；其他状态表示仍在排队或生成中。`data.result_url` 是兼容字段，可能包含上游临时签名地址；调用方不应依赖其域名或长期有效性。任务成功后，推荐使用同一 Nexus Reach 账号下的 API Key 调用 `GET /v1/videos/{task_id}/content` 获取视频文件，并立即保存到自己的存储。",
+        "description": "这是国内 Seedance 的推荐轮询入口。该接口读取网关中由后台异步轮询更新的任务记录，建议每 5～10 秒查询一次，并在长时间未完成时逐步退避。使用创建接口返回的 `task_id` 查询状态：`SUCCESS` 表示完成，`FAILURE` 表示失败，`UNKNOWN` 表示暂时无法确认；其他状态表示仍在排队或生成中。`data.result_url` 是兼容字段，可能包含上游临时签名地址；调用方不应依赖其域名或长期有效性。任务成功后，推荐使用同一 Nexus Reach 账号下的 API Key 调用 `GET /v1/videos/{task_id}/content` 获取视频文件，并立即保存到自己的存储。",
         "parameters": [
           {
             "name": "task_id",
@@ -450,7 +450,7 @@
         "tags": ["真人认证"],
         "summary": "创建真人活体认证会话",
         "operationId": "createVisualValidateSession",
-        "description": "创建一次性活体认证会话。客户端应立即打开返回的 H5Link；认证页面结束后会跳转到 CallbackURL，并附带 bytedToken、resultCode、algorithmBaseRespCode、reqMeasureInfoValue 和 verify_type 等查询参数。BytedToken 与 H5Link 均在 120 秒后失效，且只能使用一次。H5Link 可追加 `lng=zh`、`lng=en` 或 `lng=zh-Hant` 选择语言。CallbackURL 必须是专用 HTTPS 地址；BytedToken 在初始回调请求中已经到达回调服务器，即使页面随后清除地址栏也不能消除服务器、CDN 或 WAF 已记录的查询串。必须对该回调路径禁用或脱敏查询字符串日志、禁止缓存、设置 `Referrer-Policy: no-referrer`，且页面不得把令牌发送到第三方。",
+        "description": "创建一次性活体认证会话。客户端应立即打开返回的 H5Link；认证页面结束后会跳转到 CallbackURL，并附带 bytedToken、resultCode、algorithmBaseRespCode、reqMeasureInfoValue 和 verify_type 等查询参数。BytedToken 与 H5Link 均在 120 秒后失效，且只能使用一次。创建响应中的 `data.Result.BytedToken` 用于认证成功后调用 `GetVisualValidateResult`；推荐只在当前调用进程内存中短暂保留，不要通过日志、文件或人工复制传递。H5Link 可追加 `lng=zh`、`lng=en` 或 `lng=zh-Hant` 选择语言。CallbackURL 必须是专用 HTTPS 地址；BytedToken 在初始回调请求中已经到达回调服务器，即使页面随后清除地址栏也不能消除服务器、CDN 或 WAF 已记录的查询串。必须对该回调路径禁用或脱敏查询字符串日志、禁止缓存、设置 `Referrer-Policy: no-referrer`，且页面不得把令牌发送到第三方。",
         "requestBody": {
           "required": true,
           "content": {
@@ -514,7 +514,7 @@
         "tags": ["真人认证"],
         "summary": "获取真人认证素材组",
         "operationId": "getVisualValidateResult",
-        "description": "仅在回调参数 `resultCode=10000` 时调用。BytedToken 的有效期为 120 秒且只能使用一次；超时或已使用时需重新创建认证会话。成功响应的 `data.GroupId` 路径来自当前接口契约，尚未完成真人认证端到端验证；已实测无效令牌会返回 HTTP 200、`state=0`、`data=null` 和错误消息数组。",
+        "description": "仅在回调参数 `resultCode=10000` 时调用。请求中的 BytedToken 可以直接使用创建会话响应 `data.Result.BytedToken` 中仅保留在内存的原始值，无需从回调 URL 复制。BytedToken 的有效期为 120 秒且只能使用一次；超时、网络结果不确定或已使用时不得盲目重试，需重新创建认证会话。成功响应的 `data.GroupId` 路径来自当前接口契约，尚未完成真人认证端到端验证；已实测无效令牌会返回 HTTP 200、`state=0`、`data=null` 和错误消息数组。",
         "requestBody": {
           "required": true,
           "content": {

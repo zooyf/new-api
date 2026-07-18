@@ -130,6 +130,36 @@ token 估算遵循 `(输入视频秒数 + 输出视频秒数) × 像素数 × 24
 - `GetAsset` 的素材信息位于 `data`，其中包含 `Moderation.Strategy`；`CreateTime`、`UpdateTime` 为 ISO 8601 UTC，`Error` 字段可能缺失，临时签名 URL 有效期为 12 小时。
 - `GetVisualValidateResult` 的无效令牌响应已确认是 HTTP 200、`state=0`、`data=null`、`error` 为字符串数组；成功路径需在具备真人认证条件后补做端到端验证。
 
+### 真人认证成功分支交互式 E2E
+
+成功分支不能使用录屏、合成人脸、虚拟摄像头或他人替代，必须由已明确授权的本人在摄像头前完成实时活体认证。供应商说明当前真人认证限时免费，但回调中的 `reqMeasureInfoValue=1` 表示存在计费标记，因此不得向客户承诺该能力永久免费；该测试不会创建视频，也不会产生视频生成费用。
+
+在授权人员、摄像头和本机 Microsoft Edge 均已准备好，并确认 PowerShell transcript、屏幕录制和 HTTP 调试代理均关闭后运行：
+
+```powershell
+# 可提前运行的零费用预检；不会创建活体会话、素材或视频
+powershell -ExecutionPolicy Bypass `
+  -File scripts/test-seedance-visual-validation-e2e.ps1 `
+  -PreflightOnly
+
+# 仅在授权本人已经准备好后运行
+powershell -ExecutionPolicy Bypass `
+  -File scripts/test-seedance-visual-validation-e2e.ps1 `
+  -AuthorizedPersonReady
+```
+
+预检会验证公网 IP HTTPS、回调页安全响应头和无效 BytedToken 的 HTTP 200 业务错误契约；输出必须是 `VISUAL_E2E_PREFLIGHT_OK`。它不会调用 `CreateVisualValidateSession`，因此不能代替真人成功分支。
+
+脚本按以下安全顺序执行：
+
+1. 使用客户 API Key 调用 `POST /api/v3/open/CreateVisualValidateSession`，严格验证 HTTP 200、`state=1`、`error=null`、返回的 `CallbackURL` 与请求一致，且 `H5Link` 是供应商批准域名上的 HTTPS URL。
+2. `BytedToken` 和 `H5Link` 只保留在当前 PowerShell 进程内存，不写入命令行、stdout、环境变量或测试文件。脚本先让 Edge InPrivate 打开只含随机路径的本机回环地址，再通过一次性内存导航桥返回 H5Link；Edge 进程命令行中不会出现供应商 URL 或凭证。
+3. 授权人员完成实时活体后，回调页必须同时显示 `resultCode=10000`、`algorithmBaseRespCode=0` 和 `verify_type=real_time`。`reqMeasureInfoValue` 不是成功判断条件。
+4. 人员回到终端输入 `DONE`；脚本在发起创建请求后的 100 秒安全窗口内，直接使用内存中的原始 BytedToken 调用 `POST /api/v3/open/GetVisualValidateResult`，不需要复制或粘贴回调 URL 中的令牌。
+5. 最终验收必须同时满足 HTTP 200、`state=1`、`error=null`、`data.GroupId` 为非空字符串。输出文件只记录 GroupId 存在性和字符长度，不保存其值、预览或哈希，也不保存 API Key、BytedToken、H5Link、完整回调查询串或生物识别数据。
+
+如果人员没有确认成功、超过安全窗口、网络超时或最终业务校验失败，不得重用或盲目重试同一 BytedToken；应让旧会话自然失效，排除原因后重新创建会话。首次成功响应如果没有 `data.GroupId`，必须判定客户契约失败并同步修正文档/代理，不能静默兼容供应商旧示例中的根级 `GroupId`。
+
 因此 `CreateAsset` 必须配置 `affinity_response_field: data.Id`。该字段会记录素材 ID、new-api Token 和渠道的亲和关系；之后视频请求引用同一 `asset://` ID 时，分发器会固定选择创建该素材的渠道，防止素材被发往其他供应商账号。
 
 该值是 gjson 字段路径，必须与线上响应完全一致。缺少配置字段时代理会拒绝成功响应，以免产生没有亲和关系的素材。若后续接口响应发生变化，应先完成端到端确认，再同步修改动态路由和客户 OpenAPI；不要仅依据已过时的文字示例调整路径。
