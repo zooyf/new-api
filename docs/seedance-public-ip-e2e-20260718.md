@@ -475,3 +475,12 @@ POST https://api.laomandi.com/asset/SdToolApi/ListSplitBillDetail
 当前唯一未完成的成功路径是必须由真人交互的活体认证结果获取。若需要把该分支也标记为端到端通过，测试人员需在创建会话后的 120 秒内打开 H5Link、完成人工认证，并立即使用创建响应中仅保留在内存的原始 BytedToken 调用 `GetVisualValidateResult`；该步骤不会生成视频费用。
 
 已新增 `scripts/test-seedance-visual-validation-e2e.ps1` 作为该分支的交互式验证工具。其零费用 `-PreflightOnly` 模式已通过，确认公网回调安全头和无效 BytedToken 契约正常，且没有创建活体会话、素材或视频。实际成功模式要求显式传入 `-AuthorizedPersonReady`，只在进程内存保留创建响应中的 BytedToken 和 H5Link；Edge InPrivate 通过只含随机路径的一次性本机回环导航桥打开 H5Link，浏览器进程命令行不携带供应商 URL 或凭证。授权人员确认回调成功后，脚本才调用结果接口；持久化证据只记录 GroupId 存在性和字符长度，不保存值、预览或哈希。该成功模式尚未在没有授权真人准备好的情况下执行，因此预检不能替代真人成功分支的实际端到端证据。
+
+## 2026-07-19 对外文档更新与部署复验
+
+- 已将 OpenAPI 升级为 `2026-07-19.1`，加入 5 个视频路由的对照表，明确国内 Seedance 的唯一创建入口、两种查询响应格式、网关内容代理和不属于本契约的 OpenAI/Sora multipart 创建入口。
+- 已明确建议 5～10 秒轮询并逐步退避，查询与下载不重复计费；对外任务响应暂不返回最终 `total_tokens` 或单任务人民币金额，`ListSplitBillDetail` 仍只用于网关内部结算。
+- 已把 4K 标记为不可提交生产请求的计划能力；当前公开可调用报价仅包含 720p 和 1080p，避免计划价被误解为已正式开放。
+- 文档构建通过后，提交 `badc786e` 已推送并部署到 `https://124.174.0.221/apidocs/`。部署仅重建 `api-docs` 静态文档容器，没有重启 `new-api`、代理、Caddy、PostgreSQL 或 Redis。
+- 部署后零费用复验通过：文档版本 `2026-07-19.1`、9 个 paths、后端健康检查、回调页防缓存/防引用泄露、既有素材 `Active`、国内任务 `SUCCESS`、OpenAI 查询别名 `completed`、1 字节 Range 下载 HTTP 206。
+- 本次复验没有创建活体会话、素材或视频，也没有产生新的视频生成费用。真人认证成功分支仍需等待已授权本人和摄像头准备好后执行。
