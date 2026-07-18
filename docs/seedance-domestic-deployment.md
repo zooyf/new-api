@@ -72,7 +72,7 @@ curl -X POST "https://NEW_API_HOST/v1/video/generations" \
 
 参数约束：
 
-- `resolution` 已实现 `720p`、`1080p`、`4k` 转发。客户 OpenAPI 暂只公布已完成端到端验证的 `720p`、`1080p`；`4k` 必须在确认实际渠道已开通并完成端到端验证后再对客户开放。4K 输出为 10-bit H.265，调用方还需要确认播放环境支持该编码。
+- `resolution` 的 `720p`、`1080p` 已公开。`4k` 的转发、像素和计费代码已实现，但默认由 `SEEDANCE_DOMESTIC_4K_ENABLED=false` 硬性拒绝；只有确认实际渠道已开通、完成端到端验证并同步更新客户 OpenAPI 后，才能把该变量设为 `true`。4K 输出为 10-bit H.265，调用方还需要确认播放环境支持该编码。
 - `ratio` 支持 `16:9`、`4:3`、`1:1`、`3:4`、`9:16`、`21:9`、`adaptive`。
 - `dur` 支持 4–15 的整数，或 `-1` 让模型在 4–15 秒内决定时长。
 - `audio_status` 为 `1` 时生成同步音频，为 `0` 时生成无声视频。
@@ -103,7 +103,7 @@ new-api 在服务端调用供应商的 `POST /asset/SdToolApi/generate-info`，�
 
 token 估算遵循 `(输入视频秒数 + 输出视频秒数) × 像素数 × 24 / 1024`。预扣时无法读取输入视频的真实时长，因此会按每个输入视频 15 秒、`dur=-1` 按输出 15 秒做保守估算；成功后再以私有账单的 `total_tokens` 对账。人民币成本通过任务创建时冻结的 `USDExchangeRate` 换算成 new-api 额度，分组倍率仍可用于销售加价或折扣。供应商账单中的 `price`、`discount`、`amount_paid` 仅保存用于成本审计，不会覆盖面向用户的官方报价快照。
 
-4K 参数和价格依据火山方舟当前的 [创建视频生成任务 API](https://www.volcengine.com/docs/82379/1520757?lang=zh)、[模型列表](https://www.volcengine.com/docs/82379/1330310?lang=zh) 与 [模型价格](https://www.volcengine.com/docs/82379/1544106?lang=zh)。部分国内供应商的特殊封装文档仍只列出 720p/1080p；使用 4K 前需要确认实际渠道已同步开放该枚举，否则请求会被供应商拒绝。
+4K 参数和价格依据火山方舟当前的 [创建视频生成任务 API](https://www.volcengine.com/docs/82379/1520757?lang=zh)、[模型列表](https://www.volcengine.com/docs/82379/1330310?lang=zh) 与 [模型价格](https://www.volcengine.com/docs/82379/1544106?lang=zh)。部分国内供应商的特殊封装文档仍只列出 720p/1080p；因此生产环境默认禁用 4K，避免把未经该渠道验证的请求发送给供应商。
 
 ## 4. 部署五个公开素材接口
 
@@ -176,7 +176,13 @@ HWD_PROXY_ROUTES_CONFIG=/opt/new-api/seedance-domestic-routes.yml
 SEEDANCE_DOMESTIC_LMD_KEY=replace-with-supplier-secret
 ```
 
-也可以把最后一项放入权限为 `0600` 的独立密钥文件，并设置：
+new-api 主进程必须显式保持以下默认值，不能只设置在 `hwdrama-proxy`：
+
+```dotenv
+SEEDANCE_DOMESTIC_4K_ENABLED=false
+```
+
+也可以把 `SEEDANCE_DOMESTIC_LMD_KEY` 放入权限为 `0600` 的独立密钥文件，并设置：
 
 ```dotenv
 HWD_PROXY_SECRETS_FILE=/opt/new-api/hwdrama-proxy-secrets.env
@@ -223,6 +229,7 @@ curl http://127.0.0.1:3001/healthz
 - 类型 59 渠道的 Base URL、`lmd-key` 和模型均已配置，并已用一条最小视频任务完成连通性测试（异步视频渠道不使用后台的同步渠道测试按钮）。
 - YAML 中填写的是渠道数据库 ID 和 Token 数据库 ID，不是渠道类型或明文 API Key。
 - `SEEDANCE_DOMESTIC_LMD_KEY` 已注入进程或 `0600` 密钥文件，日志和配置文件中没有明文密钥。
+- `SEEDANCE_DOMESTIC_4K_ENABLED` 保持 `false`；只有实际渠道 4K E2E 和客户 OpenAPI 同步完成后才允许开启。
 - 路由配置验证通过，五个公开路径能命中，`ListSplitBillDetail` 无公网路由。
 - `CreateAsset` 响应字段路径与 `affinity_response_field` 一致，数据库能写入素材亲和记录。
 - 已验证 `CreateAsset` → `GetAsset` 到 `Active` → `asset://` 创建视频的完整链路。

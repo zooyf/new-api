@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Nexus Reach Seedance 2.0 API",
-    "version": "2026-07-19.1",
-    "description": "Seedance 2.0 国内视频生成与素材资产接口。本 OpenAPI 文件列出的 9 个 paths 构成 Seedance 国内客户契约；网关为其他供应商保留的通用 new-api 路由不属于本契约。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。视频创建、状态查询、完整下载、Range 下载以及素材组/素材主流程已于 2026-07-18 通过公网 IP HTTPS 入口完成端到端验证；真人认证成功路径需要用户在 120 秒内完成人工活体认证，因此不属于自动化验证范围。`ListSplitBillDetail` 仅供网关内部结算使用，不是对外 API。"
+    "version": "2026-07-19.2",
+    "description": "Seedance 2.0 国内视频生成与素材资产接口。本 OpenAPI 文件列出的 9 个 paths 构成 Seedance 国内客户契约；网关为其他供应商保留的通用 new-api 路由不属于本契约。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。视频创建、状态查询、完整下载、Range 下载以及素材组/素材主流程已于 2026-07-18 通过公网 IP HTTPS 入口完成端到端验证；9 个 operation 中已有 8 个完成业务成功分支 E2E，`GetVisualValidateResult` 仅完成无效令牌负例，其成功分支必须由已授权本人在 120 秒内完成人工活体认证后补验。`ListSplitBillDetail` 仅供网关内部结算使用，不是对外 API。"
   },
   "servers": [
     {
@@ -119,8 +119,8 @@
               }
             }
           },
-          "500": { "$ref": "#/components/responses/InternalError" },
-          "502": { "$ref": "#/components/responses/UpstreamError" },
+          "500": { "$ref": "#/components/responses/TaskInternalError" },
+          "502": { "$ref": "#/components/responses/TaskUpstreamError" },
           "503": {
             "description": "当前账号分组没有可用的国内 Seedance 渠道。",
             "content": {
@@ -193,7 +193,7 @@
           },
           "401": { "$ref": "#/components/responses/VideoUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
-          "500": { "$ref": "#/components/responses/InternalError" },
+          "500": { "$ref": "#/components/responses/TaskInternalError" },
           "503": {
             "description": "任务绑定的渠道当前不可用。",
             "content": {
@@ -212,7 +212,7 @@
         "tags": ["视频生成"],
         "summary": "兼容查询视频任务（OpenAI 格式）",
         "operationId": "getSeedanceDomesticVideoOpenAI",
-        "description": "使用与 `GET /v1/video/generations/{task_id}` 相同的公开任务 ID，但将状态转换为 OpenAI Video 格式：`queued`、`in_progress`、`completed` 或 `failed`。这是查询响应的兼容别名，不代表国内 Seedance 支持 OpenAI/Sora 的 `POST /v1/videos` multipart 创建协议。下载视频时仍推荐调用 `GET /v1/videos/{task_id}/content`。",
+        "description": "使用与 `GET /v1/video/generations/{task_id}` 相同的公开任务 ID，但将状态转换为 OpenAI Video 格式：`queued`、`in_progress`、`completed`、`failed` 或 `unknown`。新建但尚未进入队列的任务，以及网关暂时无法识别的状态，会返回 `unknown`。这是查询响应的兼容别名，不代表国内 Seedance 支持 OpenAI/Sora 的 `POST /v1/videos` multipart 创建协议。下载视频时仍推荐调用 `GET /v1/videos/{task_id}/content`。",
         "parameters": [
           {
             "name": "task_id",
@@ -261,7 +261,7 @@
           },
           "401": { "$ref": "#/components/responses/VideoUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
-          "500": { "$ref": "#/components/responses/InternalError" },
+          "500": { "$ref": "#/components/responses/TaskInternalError" },
           "503": {
             "description": "任务绑定的渠道当前不可用。",
             "content": {
@@ -280,7 +280,7 @@
         "tags": ["视频生成"],
         "summary": "下载生成的视频",
         "operationId": "downloadSeedanceDomesticVideo",
-        "description": "这是 Nexus Reach 网关提供的本地视频代理接口，不是上游供应商接口。它根据公开 `task_id` 获取任务保存的上游结果并流式返回；只有属于当前 Nexus Reach 账号且状态为 `SUCCESS` 的任务才能下载。响应的 `Content-Type` 由上游视频资源决定，通常为 `video/mp4`，也可能是 `application/octet-stream` 或 `text/plain`。响应禁止共享缓存；由于上游资源可能过期，任务完成后应尽快下载并保存。支持 Range 请求。",
+        "description": "这是 Nexus Reach 网关提供的本地视频代理接口，不是上游供应商接口。公开 API 客户端应使用 Bearer API Key；Nexus Reach 控制台的视频预览还可以使用已登录的浏览器会话，该会话方式不属于本 OpenAPI 客户契约。网关根据公开 `task_id` 获取任务保存的上游结果并流式返回；只有属于当前 Nexus Reach 账号且状态为 `SUCCESS` 的任务才能下载。响应的 `Content-Type` 由上游视频资源决定，通常为 `video/mp4`，也可能是 `application/octet-stream` 或 `text/plain`。网关只转发 Content-Type、Content-Length、Content-Range、Accept-Ranges、ETag、Last-Modified 和 Content-Disposition 资源头，不会转发供应商 Cookie 或服务端标识。响应禁止共享缓存；由于上游资源可能过期，任务完成后应尽快下载并保存。支持 Range 请求。",
         "parameters": [
           {
             "name": "task_id",
@@ -346,7 +346,7 @@
             }
           },
           "206": {
-            "description": "Range 请求返回的部分视频内容，并保留 Content-Range、Accept-Ranges 等上游响应头。",
+            "description": "Range 请求返回的部分视频内容，并保留白名单内的 Content-Range、Accept-Ranges 等上游资源头。",
             "headers": {
               "Cache-Control": {
                 "description": "固定为 `private, no-store`，禁止共享缓存保存客户视频。",
@@ -503,6 +503,7 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AssetRouteNotFound" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
           "502": { "$ref": "#/components/responses/UpstreamError" }
@@ -562,6 +563,7 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AssetRouteNotFound" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
           "502": { "$ref": "#/components/responses/UpstreamError" }
@@ -622,6 +624,7 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AssetRouteNotFound" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
           "502": { "$ref": "#/components/responses/UpstreamError" }
@@ -695,6 +698,7 @@
           },
           "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AssetRouteNotFound" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
           "502": { "$ref": "#/components/responses/UpstreamError" }
@@ -765,6 +769,7 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/AssetUnauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AssetRouteNotFound" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
           "502": { "$ref": "#/components/responses/UpstreamError" }
@@ -840,6 +845,20 @@
           }
         }
       },
+      "AssetRouteNotFound": {
+        "description": "API Key 有效，但当前 Key、模型与操作没有匹配的国内 Seedance 上游路由。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "error": {
+                "message": "no upstream route for api key, model, and action",
+                "code": "no_upstream_route"
+              }
+            }
+          }
+        }
+      },
       "Forbidden": {
         "description": "当前 API Key 无权访问该接口或资源。",
         "content": {
@@ -866,6 +885,32 @@
                 "type": "rate_limit_error",
                 "code": "rate_limit_exceeded"
               }
+            }
+          }
+        }
+      },
+      "TaskInternalError": {
+        "description": "视频任务服务内部错误。视频创建和查询控制器返回裸 TaskError 结构。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/TaskErrorResponse" },
+            "example": {
+              "code": "internal_error",
+              "message": "internal server error",
+              "data": null
+            }
+          }
+        }
+      },
+      "TaskUpstreamError": {
+        "description": "视频生成服务返回了无法解析或不完整的响应。视频控制器返回裸 TaskError 结构。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/TaskErrorResponse" },
+            "example": {
+              "code": "invalid_response",
+              "message": "invalid upstream task id",
+              "data": null
             }
           }
         }
@@ -909,11 +954,11 @@
           "url": {
             "type": "string",
             "minLength": 1,
+            "pattern": "\\S",
             "description": "媒体地址。"
           }
         },
-        "required": ["url"],
-        "additionalProperties": false
+        "required": ["url"]
       },
       "ContentItem": {
         "type": "object",
@@ -927,6 +972,7 @@
           "text": {
             "type": "string",
             "minLength": 1,
+            "pattern": "\\S",
             "description": "type=text 时必填。引用媒体时请使用“图片1、图片2、视频1”等顺序称呼，不要填写 AssetId。"
           },
           "image_url": {
@@ -940,13 +986,7 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "reference_image",
-              "first_frame",
-              "reference_video",
-              "reference_audio"
-            ],
-            "description": "媒体语义角色；仅在相应输入模式需要时填写。"
+            "description": "可选的供应商媒体语义角色。常见值包括 reference_image、first_frame、reference_video 和 reference_audio；网关会透传该字段。"
           }
         },
         "oneOf": [
@@ -989,21 +1029,21 @@
           "prompt": {
             "type": "string",
             "minLength": 1,
-            "description": "提示词简写。引用媒体时使用“图片1、视频1”等顺序称呼，不要直接填写 AssetId。"
+            "description": "提示词简写。仅包含空白字符时会被忽略；引用媒体时使用“图片1、视频1”等顺序称呼，不要直接填写 AssetId。"
           },
           "image": {
             "type": "string",
             "minLength": 1,
-            "description": "单张图片地址简写。"
+            "description": "单张图片地址简写；仅包含空白字符时会被忽略。"
           },
           "images": {
             "type": "array",
             "minItems": 1,
             "maxItems": 9,
-            "uniqueItems": true,
             "items": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "pattern": "\\S"
             },
             "description": "多张图片地址简写，最多 9 张。"
           },
@@ -1179,7 +1219,7 @@
           },
           "status": {
             "type": "string",
-            "enum": ["queued", "in_progress", "completed", "failed"]
+            "enum": ["queued", "in_progress", "completed", "failed", "unknown"]
           },
           "progress": {
             "type": "integer",

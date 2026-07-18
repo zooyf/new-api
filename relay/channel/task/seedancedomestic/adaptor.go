@@ -103,7 +103,13 @@ func normalizeGenerateRequest(request *relaycommon.TaskSubmitReq, explicitDurati
 	if resolution == "" {
 		resolution = "720p"
 	}
+	if resolution == "4k" && !seedanceDomestic4KEnabled {
+		return nil, fmt.Errorf("resolution 4k is not enabled for this deployment")
+	}
 	if _, ok := resolutionPixels[resolution]; !ok {
+		if !seedanceDomestic4KEnabled {
+			return nil, fmt.Errorf("resolution must be 720p or 1080p")
+		}
 		return nil, fmt.Errorf("resolution must be 720p, 1080p, or 4k")
 	}
 	ratio := strings.TrimSpace(metadata.Ratio)

@@ -177,8 +177,16 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	for key, values := range resp.Header {
-		for _, value := range values {
+	for _, key := range []string{
+		"Accept-Ranges",
+		"Content-Disposition",
+		"Content-Length",
+		"Content-Range",
+		"Content-Type",
+		"ETag",
+		"Last-Modified",
+	} {
+		for _, value := range resp.Header.Values(key) {
 			c.Writer.Header().Add(key, value)
 		}
 	}

@@ -68,7 +68,29 @@ func TestValidateRequestRejectsUnsafeBillingInputs(t *testing.T) {
 	}
 }
 
-func TestValidateRequestAcceptsAndNormalizes4K(t *testing.T) {
+func TestValidateRequestRejects4KWhenDisabled(t *testing.T) {
+	oldEnabled := seedanceDomestic4KEnabled
+	seedanceDomestic4KEnabled = false
+	t.Cleanup(func() { seedanceDomestic4KEnabled = oldEnabled })
+	c, info := seedanceTestContext(t, `{
+  "model":"doubao-seedance-2-0-260128",
+  "prompt":"a cinematic shot",
+  "resolution":"4K",
+  "ratio":"21:9",
+  "dur":4
+}`)
+
+	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+
+	require.NotNil(t, taskErr)
+	assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+	assert.Contains(t, taskErr.Message, "4k is not enabled")
+}
+
+func TestValidateRequestAcceptsAndNormalizes4KWhenEnabled(t *testing.T) {
+	oldEnabled := seedanceDomestic4KEnabled
+	seedanceDomestic4KEnabled = true
+	t.Cleanup(func() { seedanceDomestic4KEnabled = oldEnabled })
 	c, info := seedanceTestContext(t, `{
   "model":"doubao-seedance-2-0-260128",
   "prompt":"a cinematic shot",
@@ -106,6 +128,9 @@ func TestOfficial4KPixelDimensions(t *testing.T) {
 }
 
 func TestEstimateTaskBillingMatchesOfficial4KTiers(t *testing.T) {
+	oldEnabled := seedanceDomestic4KEnabled
+	seedanceDomestic4KEnabled = true
+	t.Cleanup(func() { seedanceDomestic4KEnabled = oldEnabled })
 	oldRate := operation_setting.USDExchangeRate
 	operation_setting.USDExchangeRate = 7.3
 	t.Cleanup(func() { operation_setting.USDExchangeRate = oldRate })
@@ -181,6 +206,56 @@ func TestEstimateTaskBillingMatchesOfficial720pExample(t *testing.T) {
 	assert.Equal(t, 340274, estimate.PriceData.Quota)
 }
 
+func TestEstimateTaskBillingMatchesOfficial1080pTiers(t *testing.T) {
+	oldRate := operation_setting.USDExchangeRate
+	operation_setting.USDExchangeRate = 7.3
+	t.Cleanup(func() { operation_setting.USDExchangeRate = oldRate })
+	tests := []struct {
+		name      string
+		content   string
+		tokens    int64
+		unitPrice string
+		quota     int
+		hasVideo  bool
+	}{
+		{
+			name:      "without video input",
+			content:   "",
+			tokens:    194_400,
+			unitPrice: "51",
+			quota:     679_068,
+		},
+		{
+			name:      "with video input",
+			content:   `,"content":[{"type":"video_url","video_url":{"url":"https://example.com/input.mp4"}}]`,
+			tokens:    923_400,
+			unitPrice: "31",
+			quota:     1_960_644,
+			hasVideo:  true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := `{"model":"doubao-seedance-2-0-260128","prompt":"a cinematic shot","resolution":"1080p","ratio":"16:9","dur":4` + test.content + `}`
+			c, info := seedanceTestContext(t, body)
+			info.PriceData.GroupRatioInfo = types.GroupRatioInfo{GroupRatio: 1}
+			adaptor := &TaskAdaptor{}
+			require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+
+			estimate, taskErr := adaptor.EstimateTaskBilling(c, info)
+
+			require.Nil(t, taskErr)
+			require.NotNil(t, estimate)
+			require.NotNil(t, estimate.Snapshot)
+			assert.Equal(t, test.tokens, estimate.Snapshot.EstimatedTokens)
+			assert.Equal(t, test.unitPrice, estimate.Snapshot.UnitPricePerMillionTokens)
+			assert.Equal(t, test.hasVideo, estimate.Snapshot.HasVideoInput)
+			assert.Equal(t, test.quota, estimate.PriceData.Quota)
+		})
+	}
+}
+
 func TestEstimateTaskBillingUsesVideoInputPriceAndConservativeDuration(t *testing.T) {
 	oldRate := operation_setting.USDExchangeRate
 	operation_setting.USDExchangeRate = 7.3
@@ -191,7 +266,7 @@ func TestEstimateTaskBillingUsesVideoInputPriceAndConservativeDuration(t *testin
   "content":[{"type":"video_url","video_url":{"url":"https://example.com/input.mp4"}}],
   "resolution":"720p",
   "ratio":"16:9",
-  "dur":5
+  "dur":4
 }`)
 	info.PriceData.GroupRatioInfo = types.GroupRatioInfo{GroupRatio: 1}
 	adaptor := &TaskAdaptor{}
@@ -200,10 +275,10 @@ func TestEstimateTaskBillingUsesVideoInputPriceAndConservativeDuration(t *testin
 	estimate, taskErr := adaptor.EstimateTaskBilling(c, info)
 
 	require.Nil(t, taskErr)
-	assert.Equal(t, int64(432000), estimate.Snapshot.EstimatedTokens)
+	assert.Equal(t, int64(410_400), estimate.Snapshot.EstimatedTokens)
 	assert.Equal(t, "28", estimate.Snapshot.UnitPricePerMillionTokens)
 	assert.True(t, estimate.Snapshot.HasVideoInput)
-	assert.Equal(t, 828493, estimate.PriceData.Quota)
+	assert.Equal(t, 787_068, estimate.PriceData.Quota)
 }
 
 func TestEstimateTaskBillingBoundsEveryInputVideoDuration(t *testing.T) {

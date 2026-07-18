@@ -6,14 +6,15 @@
 - 验证日期：2026-07-18（Asia/Shanghai）
 - 付费全链路后端实现：`d7542aa4`
 - 随后部署并完成零费用复验的文档/素材代理实现：`453829ad`
-- 当前对外文档与真人认证回调安全配置：`22be42a4`
+- 当前对外文档版本：`2026-07-19.2`
+- 真人认证回调安全配置基线：`22be42a4`
 - 鉴权方式：`Authorization: Bearer <Nexus Reach API Key>`
 - Seedance 国内客户契约接口数量：9 个（服务器保留的其他供应商通用 new-api 路由不属于本契约）
 - 付费视频生成次数：1 次
 - 付费验证规格：720p、4 秒、无输入视频、无音频、使用素材库图片作为参考图
 - 视频任务：`task_zzxWmWISHZRwfoTt7Mb4Mp66m9aRVsuj`
-- 结果：视频创建、两种状态查询、完整下载、Range 下载、素材组创建、图片素材创建和素材查询均通过。
-- 限制：`GetVisualValidateResult` 的成功分支要求用户在 120 秒内完成人工活体认证，本次自动化仅验证了会话创建成功和无效 BytedToken 的业务失败分支。
+- 结果：9 个公网 operation 均有真实路由证据，其中 8 个已完成业务成功分支 E2E；视频创建、两种状态查询、完整下载、Range 下载、素材组创建、图片素材创建和素材查询均通过。
+- 唯一未完成的业务成功分支：`GetVisualValidateResult` 要求已授权本人在 120 秒内完成人工活体认证；当前仅验证了会话创建成功和无效 BytedToken 的业务失败分支，不能把预检表述为成功分支通过。
 
 公网 IP 使用受信任的 IP SAN HTTPS 证书，客户端不需要 `-k`。域名 `gateway.nexus-reach.com` 的应用路由和证书配置已完成，但当前仍可能受备案/网络放行状态影响；在该问题解除前，以公网 IP HTTPS 入口为准。
 
@@ -25,8 +26,8 @@
 
 | 顺序 | 公开 API | 验证内容 | 结果 |
 | ---: | --- | --- | --- |
-| 1 | `POST /api/v3/open/CreateVisualValidateSession` | 创建真人认证会话 | 通过 |
-| 2 | `POST /api/v3/open/GetVisualValidateResult` | 无效 BytedToken 的 HTTP 200 业务错误 | 通过；成功分支需人工 |
+| 1 | `POST /api/v3/open/CreateVisualValidateSession` | 创建真人认证会话 | 成功分支通过 |
+| 2 | `POST /api/v3/open/GetVisualValidateResult` | 无效 BytedToken 的 HTTP 200 业务错误 | 负例通过；成功分支未执行 |
 | 3 | `POST /api/v3/open/CreateAssetGroup` | 创建素材组 | 通过 |
 | 4 | `POST /api/v3/open/CreateAsset` | 从公网图片创建素材 | 通过 |
 | 5 | `POST /api/v3/open/GetAsset` | 查询素材直至 `Active` | 通过 |
@@ -41,13 +42,33 @@
 
 以下所有公开 URL 均以 `https://124.174.0.221` 为基础地址。示例已删除 API Key、BytedToken、H5Link、上游 RequestId 和临时签名查询参数。
 
+### 3.0 完整公开参数索引
+
+本表给出每个 operation 的完整参数入口和成功响应字段；字段的类型、必填/可选、默认值、枚举、范围、nullable、错误响应以及可直接复制的示例，以线上 OpenAPI `2026-07-19.2` 为唯一客户契约。下文保存的是本次真实 E2E 的具体请求和响应，不能用单个样例替代完整 schema。
+
+| Operation | 请求参数 | 成功响应 |
+| --- | --- | --- |
+| `POST /api/v3/open/CreateVisualValidateSession` | JSON：`CallbackURL`（string/URI，必填） | `state`、`data.ResponseMetadata`、`data.Result.BytedToken`、`data.Result.H5Link`、`data.Result.CallbackURL`、`error` |
+| `POST /api/v3/open/GetVisualValidateResult` | JSON：`BytedToken`（string，必填） | `state`、`data.GroupId`、`error`；业务失败可能仍是 HTTP 200 |
+| `POST /api/v3/open/CreateAssetGroup` | JSON：`Name`（string，必填，最大 64）、`Description`（string，可选，最大 300） | `state`、`data.Id`、`error` |
+| `POST /api/v3/open/CreateAsset` | JSON：`GroupId`、`URL`、`AssetType`（必填），`Name`（可选）；`AssetType=Image/Video/Audio` | `state`、`data.Id`、`error`，以及 `X-New-Api-Asset-Namespace` 响应头 |
+| `POST /api/v3/open/GetAsset` | JSON：`Id`（string，必填） | `state`、`data.Id/Name/URL/AssetType/GroupId/Status/Moderation/Error/CreateTime/UpdateTime/ProjectName`、`error` |
+| `POST /v1/video/generations` | JSON：`model`；`content` 或 `prompt/image/images`；`audio_status/generate_audio`；`resolution=720p/1080p`；`ratio`；`dur=4～15/-1` | `id`、`task_id`、`object`、`model`、`status`、`progress`、`created_at` |
+| `GET /v1/video/generations/{task_id}` | Path：`task_id`（必填） | `code` 与 `data.task_id/status/fail_reason/result_url/submit_time/start_time/finish_time/progress` |
+| `GET /v1/videos/{task_id}` | Path：`task_id`（必填） | OpenAI 格式：`id/task_id/object/model/status/progress/created_at/completed_at/metadata/error`；状态含 `unknown` |
+| `GET /v1/videos/{task_id}/content` | Path：`task_id`；可选请求头 `Range`、`If-Range` | HTTP 200/206 二进制流，仅转发 `Content-Type/Content-Length/Content-Range/Accept-Ranges/ETag/Last-Modified/Content-Disposition` 资源头，并固定 `Cache-Control: private, no-store`；上游 Cookie 和服务端标识不会返回给客户 |
+
+统一鉴权为 `Authorization: Bearer <Nexus Reach API Key>`。素材代理在 API Key 有效但没有匹配的上游路由时返回 HTTP 404、`error.code=no_upstream_route`。公开视频下载还支持 Nexus Reach 控制台的已登录浏览器会话，但该方式不属于客户 OpenAPI。
+
+上游证据口径如下：五个 `/api/v3/open/*` 接口由专用代理修改鉴权头和目标 URL，但不改成功 JSON body；因此下文标注为“公网/上游相同”的 JSON 同时代表供应商 body 与客户 body，本次产物没有再保存一份包含供应商密钥的重复原始副本。视频创建会规范化请求并隐藏供应商任务 ID；国内查询由后台调用 `generate-info`；OpenAI 查询别名只读取同一网关任务记录；内容下载对应的是对保存结果 URL 的资源 GET，而不是供应商同名 API。
+
 ### 3.1 创建真人认证会话
 
 - 公开 URL：`POST https://124.174.0.221/api/v3/open/CreateVisualValidateSession`
 - 上游 URL：`POST https://api.laomandi.com/asset/SdToolApi/CreateVisualValidateSession`
 - 转发：请求 JSON 原样转发；客户 `Authorization` 不发送给上游，代理改用服务端保存的 `lmd-key`。
 
-请求：
+公网请求与实际上游请求 body（相同）：
 
 ```json
 {
@@ -55,7 +76,7 @@
 }
 ```
 
-实际公开响应（HTTP 200）：
+实际上游响应与实际公开响应 body（相同，HTTP 200）：
 
 ```json
 {
@@ -84,7 +105,7 @@
 - 上游 URL：`POST https://api.laomandi.com/asset/SdToolApi/GetVisualValidateResult`
 - 转发：请求和供应商业务响应原样转发。
 
-本次自动化负例请求：
+本次自动化负例的公网请求与实际上游请求 body（相同）：
 
 ```json
 {
@@ -92,7 +113,7 @@
 }
 ```
 
-实际公开响应（HTTP 200）：
+实际上游响应与实际公开响应 body（相同，HTTP 200）：
 
 ```json
 {
@@ -110,7 +131,7 @@
 - 上游 URL：`POST https://api.laomandi.com/asset/SdToolApi/CreateAssetGroup`
 - 转发：请求和响应原样转发。
 
-请求：
+公网请求与实际上游请求 body（相同）：
 
 ```json
 {
@@ -119,7 +140,7 @@
 }
 ```
 
-实际公开响应（HTTP 200）：
+实际上游响应与实际公开响应 body（相同，HTTP 200）：
 
 ```json
 {
@@ -137,7 +158,7 @@
 - 上游 URL：`POST https://api.laomandi.com/asset/SdToolApi/CreateAsset`
 - 转发：请求转发给与素材组绑定的同一供应商渠道；成功响应增加 `X-New-Api-Asset-Namespace: seedance-domestic`。
 
-请求：
+公网请求与实际上游请求 body（相同）：
 
 ```json
 {
@@ -148,7 +169,7 @@
 }
 ```
 
-实际公开响应（HTTP 200）：
+实际上游响应与实际公开响应 body（相同，HTTP 200）：
 
 ```json
 {
@@ -162,13 +183,37 @@
 
 已知的供应商素材业务错误由网关转换为 HTTP 400，并保留具体 `error.code` 和 `error.message`，避免改写成丢失原因的通用 502。
 
+部署修复后的真实尺寸负例使用同一公网 endpoint。公网请求与实际上游请求 body 相同：
+
+```json
+{
+  "GroupId": "group-20260718225334-bwxch",
+  "URL": "https://httpbin.org/image/png",
+  "Name": "cookie-strip-negative-453829ad",
+  "AssetType": "Image"
+}
+```
+
+供应商判定该图片只有 100×100 px。专用代理读取供应商业务错误后返回 HTTP 400，实际公开响应为：
+
+```json
+{
+  "error": {
+    "code": "InvalidParameter.WidthTooSmall",
+    "message": "Width must be between 300px and 6000px."
+  }
+}
+```
+
+该产物同时确认响应没有供应商 `Set-Cookie`。测试未创建素材记录，也没有产生视频生成费用；供应商原始错误 envelope 没有作为客户证据持久化，报告不把规范化后的 body 误称为未修改的上游原文。
+
 ### 3.5 查询素材
 
 - 公开 URL：`POST https://124.174.0.221/api/v3/open/GetAsset`
 - 上游 URL：`POST https://api.laomandi.com/asset/SdToolApi/GetAsset`
 - 转发：请求和业务响应原样转发；供应商 `Set-Cookie` 不向客户暴露。
 
-请求：
+公网请求与实际上游请求 body（相同）：
 
 ```json
 {
@@ -176,7 +221,7 @@
 }
 ```
 
-实际公开响应（HTTP 200，临时 URL 已移除签名参数）：
+实际上游响应与实际公开响应 body（相同，HTTP 200；临时 URL 已移除签名参数）：
 
 ```json
 {
@@ -376,6 +421,8 @@ Range 请求 `Range: bytes=0-1023` 的结果：
 - `Cache-Control: private, no-store`
 - SHA-256：`a481f9c146318539d9175f98c2bc646c4443e56b658f468a50ea8dbc13bb0108`
 
+对应的上游不是 JSON API，而是保存的 `https://s3.laomandi.com/file/<redacted>.mp4` 资源。网关发起 `GET <result_url>` 并转发客户端的 `Range` 与 `If-Range`。2026-07-19 对该资源直接执行 `Range: bytes=0-0` 的零费用复验结果为 HTTP 206、`Content-Length: 1`、`Content-Type: text/plain`、`Content-Range: bytes 0-0/1684544`、`Accept-Ranges: bytes`；公网代理的同一范围也返回 HTTP 206 和相同总长度。供应商没有与 `/v1/videos/{task_id}/content` 同名的 endpoint。
+
 ## 4. 计费验证
 
 ### 4.1 对客户的人民币价格
@@ -386,7 +433,30 @@ Range 请求 `Range: bytes=0-1023` 的结果：
 | 1080p | ¥51 / 百万 tokens | ¥31 / 百万 tokens |
 | 4K | ¥26 / 百万 tokens（计划价） | ¥16 / 百万 tokens（计划价） |
 
-4K 尚未完成供应商渠道开通和端到端验证，因此没有加入公开 `resolution` 枚举，客户当前只能提交 720p 或 1080p。
+预扣估算公式为：
+
+```text
+估算 tokens = ceil((输出秒数 + 15 × 输入视频数量) × 输出像素数 × 24 ÷ 1024)
+估算人民币 = 估算 tokens ÷ 1,000,000 × 对应规格单价
+预扣 quota = round(估算人民币 ÷ 7.3 × 500,000)
+```
+
+输出像素映射为：720p=`1280×720=921,600`，1080p=`1920×1080=2,073,600`，4K=`3840×2160=8,294,400`。预扣阶段无法可信读取远程输入视频时长，因此每个输入视频都按最大 15 秒保守估算。以下统一使用 4 秒输出、16:9、分组倍率 1，分别覆盖“无输入视频”和“1 个输入视频”两个计费分支：
+
+| 分辨率 | 输入视频 | 计费时长 | 估算 tokens | 单价 | 估算人民币 | 预扣 quota | 证据类型 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 720p | 无 | 4 秒 | 86,400 | ¥46 | ¥3.974400 | 272,219 | 真实付费 E2E + 回归测试 |
+| 720p | 1 个 | 19 秒 | 410,400 | ¥28 | ¥11.491200 | 787,068 | 回归测试/公式，不另生成视频 |
+| 1080p | 无 | 4 秒 | 194,400 | ¥51 | ¥9.914400 | 679,068 | 回归测试/公式，不另生成视频 |
+| 1080p | 1 个 | 19 秒 | 923,400 | ¥31 | ¥28.625400 | 1,960,644 | 回归测试/公式，不另生成视频 |
+| 4K | 无 | 4 秒 | 777,600 | ¥26 | ¥20.217600 | 1,384,767 | 计划价回归测试，生产禁用 |
+| 4K | 1 个 | 19 秒 | 3,693,600 | ¥16 | ¥59.097600 | 4,047,781 | 计划价回归测试，生产禁用 |
+
+由表可见，虽然“含输入视频”的百万 token 单价更低，但保守计费时长增加 15 秒，因此 720p、4 秒、无输入视频才是这些组合中的最低预扣规格。本轮遵循“只生成最便宜的一个视频”的要求，只对第一行执行真实付费 E2E；其他组合由确定性计费回归测试覆盖，不能表述为已生成视频验证。
+
+4K 的转发、像素和报价代码已保留，但生产默认 `SEEDANCE_DOMESTIC_4K_ENABLED=false`，请求在到达供应商前即返回 HTTP 400。4K 尚未完成供应商渠道开通和端到端验证，因此没有加入公开 `resolution` 枚举，客户当前只能提交 720p 或 1080p。
+
+上述六种组合由以下确定性回归测试覆盖，执行 `go test ./relay/channel/task/seedancedomestic` 已通过：`TestEstimateTaskBillingMatchesOfficial720pExample`、`TestEstimateTaskBillingUsesVideoInputPriceAndConservativeDuration`、`TestEstimateTaskBillingMatchesOfficial1080pTiers`、`TestEstimateTaskBillingMatchesOfficial4KTiers`。其中 4K 测试只验证计划价计算，不代表生产能力已开放。
 
 通用公式：
 
@@ -438,6 +508,30 @@ Range 请求 `Range: bytes=0-1023` 的结果：
 
 任务结算状态为 `settled`，系统按最终账单补扣 2,763 quota。对外报价和客户费用均使用人民币；`7.3` 只参与当前 new-api 内部美元锚定 quota 单位换算，不改变人民币价格公式。若后续把账户 quota 直接锚定人民币，可去除该内部换算层，但必须同步迁移充值、余额展示、日志和历史账务口径。
 
+2026-07-19 对生产数据库执行只读联表复核，得到以下持久化结算证据：
+
+```json
+{
+  "public_task_id": "task_zzxWmWISHZRwfoTt7Mb4Mp66m9aRVsuj",
+  "task_status": "SUCCESS",
+  "task_final_quota": 274982,
+  "upstream_task_id": "2347",
+  "reconciliation_status": "settled",
+  "attempts": 5,
+  "total_tokens": 87277,
+  "supplier_price": "46.000000",
+  "supplier_discount": "1.00",
+  "supplier_amount_paid": "4.0",
+  "expense_time": "2026-07-18 22:53:46",
+  "pre_consumed_quota": 272219,
+  "actual_quota": 274982,
+  "quota_delta": 2763,
+  "billing_reconciliation_pending": false
+}
+```
+
+该记录直接证明最终账单已落库并完成客户额度差额结算，不再只依赖文字叙述。供应商 `amount_paid=4.0` 是供应商成本账单自身的显示/舍入口径，不是客户最终收费字段；客户精确公式仍是 `87277 ÷ 1,000,000 × 46 = ¥4.014742`。由于 new-api quota 必须是整数，实际落库 274,982 quota 按内部汇率反算为 `274982 × 7.3 ÷ 500000 = ¥4.0147372`，与精确人民币金额相差 ¥0.0000048，属于单个 quota 取整误差。
+
 ### 4.3 内部账单查询窗口和时区
 
 任务成功后，后台使用供应商私有接口：
@@ -465,7 +559,7 @@ POST https://api.laomandi.com/asset/SdToolApi/ListSplitBillDetail
 - 五个真人认证/素材接口缺少 API Key：HTTP 401，`error.code=token_not_provided`；无效 Key 使用 `token_invalid`。
 - 真人认证和素材直通接口的业务失败可能返回 HTTP 200；必须检查 `state/data/error`。
 - `CreateAsset` 的已知供应商业务错误会转为 HTTP 400，并保留具体业务错误码和消息。
-- `GET /v1/videos/{task_id}/content` 只允许当前 API Key 所属账号读取自己的成功任务，并固定返回 `Cache-Control: private, no-store`。
+- `GET /v1/videos/{task_id}/content` 只允许当前 API Key 所属账号读取自己的成功任务，固定返回 `Cache-Control: private, no-store`，并通过资源响应头白名单剥离供应商 `Set-Cookie`、`Server` 等非资源头。
 - 供应商 `Set-Cookie` 响应头由素材代理剥离，不会泄漏 PHP 会话标识给客户。
 
 ## 6. 最终结论与未覆盖项

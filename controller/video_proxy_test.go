@@ -69,8 +69,11 @@ func TestVideoProxyUsesPrivateNoStoreAndPreservesRangeResponse(t *testing.T) {
 		requestHeaders <- r.Header.Clone()
 		w.Header().Set("Accept-Ranges", "bytes")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Header().Set("Content-Disposition", `attachment; filename="result.mp4"`)
 		w.Header().Set("Content-Range", "bytes 0-3/8")
 		w.Header().Set("Content-Type", "video/mp4")
+		w.Header().Set("Server", "upstream-test")
+		w.Header().Add("Set-Cookie", "supplier_session=secret; Path=/")
 		w.WriteHeader(http.StatusPartialContent)
 		_, _ = w.Write([]byte("0123"))
 	}))
@@ -118,7 +121,10 @@ func TestVideoProxyUsesPrivateNoStoreAndPreservesRangeResponse(t *testing.T) {
 	assert.Equal(t, "0123", recorder.Body.String())
 	assert.Equal(t, []string{privateVideoCacheControl}, recorder.Header().Values("Cache-Control"))
 	assert.Equal(t, "bytes", recorder.Header().Get("Accept-Ranges"))
+	assert.Equal(t, `attachment; filename="result.mp4"`, recorder.Header().Get("Content-Disposition"))
 	assert.Equal(t, "bytes 0-3/8", recorder.Header().Get("Content-Range"))
+	assert.Empty(t, recorder.Header().Values("Server"))
+	assert.Empty(t, recorder.Header().Values("Set-Cookie"))
 }
 
 func TestWriteVideoDataURLUsesPrivateNoStore(t *testing.T) {

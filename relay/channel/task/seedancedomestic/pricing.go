@@ -17,6 +17,8 @@ const (
 
 var ModelList = []string{defaultModel}
 
+var seedanceDomestic4KEnabled = common.GetEnvOrDefaultBool("SEEDANCE_DOMESTIC_4K_ENABLED", false)
+
 var resolutionPixels = map[string]map[string]int64{
 	"720p": {
 		"16:9": 1280 * 720,
