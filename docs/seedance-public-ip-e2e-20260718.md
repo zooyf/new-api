@@ -4,6 +4,7 @@
 
 - 验证入口：`https://124.174.0.221`
 - 验证日期：2026-07-18（Asia/Shanghai）
+- 部署实现：`453829ad`
 - 鉴权方式：`Authorization: Bearer <Nexus Reach API Key>`
 - 公开接口数量：9 个
 - 付费视频生成次数：1 次
@@ -13,6 +14,8 @@
 - 限制：`GetVisualValidateResult` 的成功分支要求用户在 120 秒内完成人工活体认证，本次自动化仅验证了会话创建成功和无效 BytedToken 的业务失败分支。
 
 公网 IP 使用受信任的 IP SAN HTTPS 证书，客户端不需要 `-k`。域名 `gateway.nexus-reach.com` 的应用路由和证书配置已完成，但当前仍可能受备案/网络放行状态影响；在该问题解除前，以公网 IP HTTPS 入口为准。
+
+部署后的零费用复验结果：`GetAsset` 返回 HTTP 200、`state=1`、`Status=Active`；100×100 图片的 `CreateAsset` 负例返回 HTTP 400 和 `InvalidParameter.WidthTooSmall`；两条素材响应均没有供应商 `Set-Cookie`；已有视频的 1-byte Range 请求返回 HTTP 206、`Content-Range: bytes 0-0/1684544` 和 `Cache-Control: private, no-store`。
 
 ## 2. 接口覆盖矩阵
 
