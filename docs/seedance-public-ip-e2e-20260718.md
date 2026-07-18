@@ -6,6 +6,7 @@
 - 验证日期：2026-07-18（Asia/Shanghai）
 - 付费全链路后端实现：`d7542aa4`
 - 随后部署并完成零费用复验的文档/素材代理实现：`453829ad`
+- 当前生产后端与对外文档实现：`700948c4`
 - 当前对外文档版本：`2026-07-19.2`
 - 真人认证回调安全配置基线：`22be42a4`
 - 鉴权方式：`Authorization: Bearer <Nexus Reach API Key>`
@@ -570,11 +571,13 @@ POST https://api.laomandi.com/asset/SdToolApi/ListSplitBillDetail
 
 已新增 `scripts/test-seedance-visual-validation-e2e.ps1` 作为该分支的交互式验证工具。其零费用 `-PreflightOnly` 模式已通过，确认公网回调安全头和无效 BytedToken 契约正常，且没有创建活体会话、素材或视频。实际成功模式要求显式传入 `-AuthorizedPersonReady`，只在进程内存保留创建响应中的 BytedToken 和 H5Link；Edge InPrivate 通过只含随机路径的一次性本机回环导航桥打开 H5Link，浏览器进程命令行不携带供应商 URL 或凭证。授权人员确认回调成功后，脚本才调用结果接口；持久化证据只记录 GroupId 存在性和字符长度，不保存值、预览或哈希。该成功模式尚未在没有授权真人准备好的情况下执行，因此预检不能替代真人成功分支的实际端到端证据。
 
-## 2026-07-19 对外文档更新与部署复验
+## 2026-07-19 对外文档与契约安全更新、部署复验
 
-- 已将 OpenAPI 升级为 `2026-07-19.1`，加入 5 个视频路由的对照表，明确国内 Seedance 的唯一创建入口、两种查询响应格式、网关内容代理和不属于本契约的 OpenAI/Sora multipart 创建入口。
-- 已明确建议 5～10 秒轮询并逐步退避，查询与下载不重复计费；对外任务响应暂不返回最终 `total_tokens` 或单任务人民币金额，`ListSplitBillDetail` 仍只用于网关内部结算。
-- 已把 4K 标记为不可提交生产请求的计划能力；当前公开可调用报价仅包含 720p 和 1080p，避免计划价被误解为已正式开放。
-- 文档构建通过后，提交 `badc786e` 已推送并部署到 `https://124.174.0.221/apidocs/`。部署仅重建 `api-docs` 静态文档容器，没有重启 `new-api`、代理、Caddy、PostgreSQL 或 Redis。
-- 部署后零费用复验通过：文档版本 `2026-07-19.1`、9 个 paths、后端健康检查、回调页防缓存/防引用泄露、既有素材 `Active`、国内任务 `SUCCESS`、OpenAI 查询别名 `completed`、1 字节 Range 下载 HTTP 206。
-- 本次复验没有创建活体会话、素材或视频，也没有产生新的视频生成费用。真人认证成功分支仍需等待已授权本人和摄像头准备好后执行。
+- OpenAPI 已升级为 `2026-07-19.2`：明确 9 个 operation 中 8 个已有业务成功 E2E；补全视频任务裸 `TaskError`、素材路由 404、OpenAI `unknown` 状态、控制台会话边界和真实请求字段约束。
+- 已明确国内 Seedance 的唯一创建入口、两种查询响应格式和网关内容代理；查询与下载不重复计费，对外任务响应暂不返回最终 `total_tokens` 或单任务人民币金额，`ListSplitBillDetail` 仍只用于网关内部结算。
+- 4K 仍是未开放的计划能力。生产后端显式设置 `SEEDANCE_DOMESTIC_4K_ENABLED=false`，即使客户绕过文档提交 4K，也会在创建任务、预扣费和请求供应商之前返回 HTTP 400；公开枚举和可调用报价仍只有 720p、1080p。
+- 视频内容代理改为资源响应头白名单，只转发下载所需资源头并剥离供应商 `Set-Cookie`、`Server` 等非资源头；`Cache-Control` 固定为 `private, no-store`。
+- 提交 `700948c4` 已推送并部署。后端使用不可变镜像 `new-api-seedance:700948c4`，只重建 `new-api`；素材代理容器 ID、镜像和启动时间均未变化。静态文档 bundle 为 `static/js/index.e53e0802d3.js`，只重建 `api-docs`；Caddy、PostgreSQL、Redis 均未重启。
+- 部署后零费用复验通过：文档版本 `2026-07-19.2`、9 个 paths、回调页安全头、既有素材 `Active`、国内任务 `SUCCESS`、OpenAI 查询别名 `completed`、1 字节 Range 下载 HTTP 206 且无 `Set-Cookie`。
+- 4K 门禁探针返回 HTTP 400、`code=invalid_request`；720p/1080p 使用非法时长的控制探针同样在本地返回 HTTP 400。探针前后用户剩余额度、已用额度和任务数量完全一致，确认没有创建供应商任务或产生视频费用。
+- 本次复验没有创建活体会话、素材或视频。真人认证成功分支仍需等待已授权本人和摄像头准备好后执行。
