@@ -179,6 +179,14 @@ curl http://127.0.0.1:3001/healthz
 
 动态素材代理只允许 YAML 中声明的五个动作，并按 new-api Token ID 控制路由。不要使用 `all_api_keys: true`，除非已明确接受该租户范围。
 
+真人认证服务会把一次性 `bytedToken` 放在 `CallbackURL` 的查询参数中。浏览器加载回调页时，该查询串已经到达回调服务器；页面调用 `history.replaceState` 只能减少地址栏和浏览器历史暴露，不能撤回服务器、CDN 或 WAF 已记录的请求。因此生产环境必须使用专用 HTTPS 回调路径，并同时满足：
+
+- 对该路径禁用查询字符串访问日志；日志平台不支持按路径禁用时，必须先脱敏 `bytedToken` 再写入日志。
+- 返回 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`X-Content-Type-Options: nosniff` 和只允许本页内联脚本/样式的 `Content-Security-Policy`。这些响应头必须在反向代理响应后延迟写入，以覆盖上游同名响应头；示例配置已在 `/apidocs/apidocs-example-callback.html` 路径使用 Caddy 的 deferred header 语法设置。
+- Caddy 启用访问日志时，为回调 matcher 配置 `log_skip`；外部 CDN、WAF 和负载均衡器仍需分别禁用或脱敏该路径的查询字符串日志。
+- 回调页不得加载第三方脚本、图片或分析服务，不得再次通过网络发送令牌；读取参数后立即清除地址栏查询串。
+- 令牌只在授权人员完成活体认证后立即用于 `GetVisualValidateResult`，不得持久化、共享或写入测试产物。
+
 ## 7. 部署前检查
 
 - 已完成数据库迁移，主进程与 `hwdrama-proxy` 使用同一数据库。

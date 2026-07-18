@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Nexus Reach Seedance 2.0 API",
-    "version": "2026-07-18.2",
-    "description": "Seedance 2.0 国内视频生成与素材资产接口。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。视频创建、状态查询、完整下载、Range 下载以及素材组/素材主流程已于 2026-07-18 通过公网 IP HTTPS 入口完成端到端验证；真人认证成功路径需要用户在 120 秒内完成人工活体认证，因此不属于自动化验证范围。`ListSplitBillDetail` 仅供网关内部结算使用，不是对外 API。"
+    "version": "2026-07-18.3",
+    "description": "Seedance 2.0 国内视频生成与素材资产接口。本 OpenAPI 文件列出的 9 个 paths 构成 Seedance 国内客户契约；网关为其他供应商保留的通用 new-api 路由不属于本契约。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。视频创建、状态查询、完整下载、Range 下载以及素材组/素材主流程已于 2026-07-18 通过公网 IP HTTPS 入口完成端到端验证；真人认证成功路径需要用户在 120 秒内完成人工活体认证，因此不属于自动化验证范围。`ListSplitBillDetail` 仅供网关内部结算使用，不是对外 API。"
   },
   "servers": [
     {
@@ -27,7 +27,7 @@
     },
     {
       "name": "真人认证",
-      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。真人认证仅用于依法授权的真人素材流程。创建会话后应立即打开 H5Link；BytedToken 和 H5Link 的有效期均为 120 秒、仅能使用一次。"
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。真人认证仅用于依法授权的真人素材流程。创建会话后应立即打开 H5Link；BytedToken 和 H5Link 的有效期均为 120 秒、仅能使用一次。BytedToken 会出现在回调 URL 的查询参数中：必须使用专用 HTTPS 回调路径，对该路径禁用或脱敏服务器、CDN、WAF 的查询字符串日志，返回 `Cache-Control: no-store` 和 `Referrer-Policy: no-referrer`，并在读取后立即清除浏览器地址栏中的查询串。"
     },
     {
       "name": "素材资产",
@@ -450,7 +450,7 @@
         "tags": ["真人认证"],
         "summary": "创建真人活体认证会话",
         "operationId": "createVisualValidateSession",
-        "description": "创建一次性活体认证会话。客户端应立即打开返回的 H5Link；认证页面结束后会跳转到 CallbackURL，并附带 bytedToken、resultCode、algorithmBaseRespCode、reqMeasureInfoValue 和 verify_type 等查询参数。BytedToken 与 H5Link 均在 120 秒后失效，且只能使用一次。H5Link 可追加 `lng=zh`、`lng=en` 或 `lng=zh-Hant` 选择语言。",
+        "description": "创建一次性活体认证会话。客户端应立即打开返回的 H5Link；认证页面结束后会跳转到 CallbackURL，并附带 bytedToken、resultCode、algorithmBaseRespCode、reqMeasureInfoValue 和 verify_type 等查询参数。BytedToken 与 H5Link 均在 120 秒后失效，且只能使用一次。H5Link 可追加 `lng=zh`、`lng=en` 或 `lng=zh-Hant` 选择语言。CallbackURL 必须是专用 HTTPS 地址；BytedToken 在初始回调请求中已经到达回调服务器，即使页面随后清除地址栏也不能消除服务器、CDN 或 WAF 已记录的查询串。必须对该回调路径禁用或脱敏查询字符串日志、禁止缓存、设置 `Referrer-Policy: no-referrer`，且页面不得把令牌发送到第三方。",
         "requestBody": {
           "required": true,
           "content": {
@@ -1253,7 +1253,7 @@
           "CallbackURL": {
             "type": "string",
             "format": "uri",
-            "description": "认证完成后跳转的公网 HTTPS 地址。"
+            "description": "认证完成后跳转的专用公网 HTTPS 地址。该路径必须禁用或脱敏查询字符串日志、禁止缓存并设置 Referrer-Policy: no-referrer。"
           }
         },
         "required": ["CallbackURL"],

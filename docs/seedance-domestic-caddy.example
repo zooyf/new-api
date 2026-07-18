@@ -10,6 +10,18 @@
 	@apidocs_no_slash path /apidocs
 	redir @apidocs_no_slash /apidocs/ 308
 
+	# The liveness provider returns a single-use BytedToken in the callback query.
+	# Never cache it or forward the callback URL as a referrer. Query logging for
+	# this path must also be disabled/redacted in any external CDN or WAF.
+	@visual_callback path /apidocs/apidocs-example-callback.html
+	log_skip @visual_callback
+	header @visual_callback {
+		>Cache-Control "no-store"
+		>Referrer-Policy "no-referrer"
+		>X-Content-Type-Options "nosniff"
+		>Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	}
+
 	handle_path /apidocs/* {
 		reverse_proxy api-docs:80
 	}

@@ -4,9 +4,10 @@
 
 - 验证入口：`https://124.174.0.221`
 - 验证日期：2026-07-18（Asia/Shanghai）
-- 部署实现：`453829ad`
+- 付费全链路后端实现：`d7542aa4`
+- 随后部署并完成零费用复验的文档/素材代理实现：`453829ad`
 - 鉴权方式：`Authorization: Bearer <Nexus Reach API Key>`
-- 公开接口数量：9 个
+- Seedance 国内客户契约接口数量：9 个（服务器保留的其他供应商通用 new-api 路由不属于本契约）
 - 付费视频生成次数：1 次
 - 付费验证规格：720p、4 秒、无输入视频、无音频、使用素材库图片作为参考图
 - 视频任务：`task_zzxWmWISHZRwfoTt7Mb4Mp66m9aRVsuj`
@@ -26,7 +27,7 @@
 | 3 | `POST /api/v3/open/CreateAssetGroup` | 创建素材组 | 通过 |
 | 4 | `POST /api/v3/open/CreateAsset` | 从公网图片创建素材 | 通过 |
 | 5 | `POST /api/v3/open/GetAsset` | 查询素材直至 `Active` | 通过 |
-| 6 | `POST /v1/video/generations` | 使用素材库参考图创建最低价视频 | 通过 |
+| 6 | `POST /v1/video/generations` | 使用素材库参考图创建最低预估/预扣规格视频 | 通过 |
 | 7 | `GET /v1/video/generations/{task_id}` | 国内格式状态轮询 | 通过 |
 | 8 | `GET /v1/videos/{task_id}` | OpenAI 格式查询别名 | 通过 |
 | 9 | `GET /v1/videos/{task_id}/content` | 完整下载和 Range 下载 | 通过 |
@@ -226,6 +227,20 @@
   "resolution": "720p",
   "ratio": "16:9",
   "dur": 4
+}
+```
+
+实际公开创建响应（HTTP 200）：
+
+```json
+{
+  "id": "task_zzxWmWISHZRwfoTt7Mb4Mp66m9aRVsuj",
+  "task_id": "task_zzxWmWISHZRwfoTt7Mb4Mp66m9aRVsuj",
+  "object": "video",
+  "model": "doubao-seedance-2-0-260128",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1784386426
 }
 ```
 
@@ -452,6 +467,6 @@ POST https://api.laomandi.com/asset/SdToolApi/ListSplitBillDetail
 
 ## 6. 最终结论与未覆盖项
 
-公网 IP HTTPS 入口已能完整承载 9 个公开 Seedance API。客户可使用素材库图片创建视频，轮询国内格式或 OpenAI 兼容格式的任务状态，并通过网关代理完整或分段下载结果。
+公网 IP HTTPS 入口已能完整承载本文件列出的 9 个 Seedance 国内客户契约 API。服务器还保留供其他供应商使用的通用 new-api 路由，例如 `POST /v1/videos` 和 `POST /v1/videos/{video_id}/remix`；它们不属于国内 Seedance 特殊格式契约，也不应据此推断国内 Seedance 支持 OpenAI/Sora multipart 创建协议。客户可使用素材库图片创建视频，轮询国内格式或 OpenAI 兼容格式的任务状态，并通过网关代理完整或分段下载结果。
 
 当前唯一未完成的成功路径是必须由真人交互的活体认证结果获取。若需要把该分支也标记为端到端通过，测试人员需在创建会话后的 120 秒内打开 H5Link、完成人工认证，并立即用回调返回的 BytedToken 调用 `GetVisualValidateResult`；该步骤不会生成视频费用。
