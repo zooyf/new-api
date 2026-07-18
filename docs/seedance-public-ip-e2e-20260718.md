@@ -6,6 +6,7 @@
 - 验证日期：2026-07-18（Asia/Shanghai）
 - 付费全链路后端实现：`d7542aa4`
 - 随后部署并完成零费用复验的文档/素材代理实现：`453829ad`
+- 当前对外文档与真人认证回调安全配置：`22be42a4`
 - 鉴权方式：`Authorization: Bearer <Nexus Reach API Key>`
 - Seedance 国内客户契约接口数量：9 个（服务器保留的其他供应商通用 new-api 路由不属于本契约）
 - 付费视频生成次数：1 次
@@ -17,6 +18,8 @@
 公网 IP 使用受信任的 IP SAN HTTPS 证书，客户端不需要 `-k`。域名 `gateway.nexus-reach.com` 的应用路由和证书配置已完成，但当前仍可能受备案/网络放行状态影响；在该问题解除前，以公网 IP HTTPS 入口为准。
 
 部署后的零费用复验结果：`GetAsset` 返回 HTTP 200、`state=1`、`Status=Active`；100×100 图片的 `CreateAsset` 负例返回 HTTP 400 和 `InvalidParameter.WidthTooSmall`；两条素材响应均没有供应商 `Set-Cookie`；已有视频的 1-byte Range 请求返回 HTTP 206、`Content-Range: bytes 0-0/1684544` 和 `Cache-Control: private, no-store`。
+
+`22be42a4` 部署后的零费用复验结果：真人认证回调返回 HTTP 200、`Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`X-Content-Type-Options: nosniff` 和限制第三方网络访问/嵌入的 `Content-Security-Policy`，不返回 `Set-Cookie`，也不把查询参数中的探测令牌反射到响应正文；线上 OpenAPI 版本为 `2026-07-18.3`，包含且只包含 9 个 Seedance 国内客户契约 operation，未公开 `ListSplitBillDetail`。既有 `GetAsset`、国内格式视频查询、OpenAI 格式查询别名和 1-byte Range 下载均再次通过，未创建新素材或新视频，未产生视频生成费用。
 
 ## 2. 接口覆盖矩阵
 
