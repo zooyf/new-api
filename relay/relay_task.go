@@ -324,6 +324,22 @@ var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp 
 	relayconstant.RelayModeVideoFetchByID: videoFetchByIDRespBodyBuilder,
 }
 
+type seedanceDomesticTaskFetchResponse struct {
+	Code string                        `json:"code"`
+	Data seedanceDomesticTaskFetchData `json:"data"`
+}
+
+type seedanceDomesticTaskFetchData struct {
+	TaskID     string  `json:"task_id"`
+	Status     string  `json:"status"`
+	FailReason string  `json:"fail_reason"`
+	ResultURL  *string `json:"result_url"`
+	SubmitTime int64   `json:"submit_time"`
+	StartTime  *int64  `json:"start_time"`
+	FinishTime *int64  `json:"finish_time"`
+	Progress   string  `json:"progress"`
+}
+
 func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 	respBuilder, ok := fetchRespBuilders[relayMode]
 	if !ok {
@@ -441,6 +457,41 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 			return
 		}
 		taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented)
+		return
+	}
+
+	if originTask.Platform == constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeSeedanceDomestic)) {
+		var resultURL *string
+		if originTask.Status == model.TaskStatusSuccess {
+			value := strings.TrimSpace(originTask.GetResultURL())
+			if value != "" {
+				resultURL = &value
+			}
+		}
+		var startTime *int64
+		if originTask.StartTime > 0 {
+			startTime = &originTask.StartTime
+		}
+		var finishTime *int64
+		if originTask.FinishTime > 0 {
+			finishTime = &originTask.FinishTime
+		}
+		respBody, err = common.Marshal(seedanceDomesticTaskFetchResponse{
+			Code: dto.TaskSuccessCode,
+			Data: seedanceDomesticTaskFetchData{
+				TaskID:     originTask.TaskID,
+				Status:     string(originTask.Status),
+				FailReason: originTask.FailReason,
+				ResultURL:  resultURL,
+				SubmitTime: originTask.SubmitTime,
+				StartTime:  startTime,
+				FinishTime: finishTime,
+				Progress:   originTask.Progress,
+			},
+		})
+		if err != nil {
+			taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+		}
 		return
 	}
 

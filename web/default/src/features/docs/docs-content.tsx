@@ -55,9 +55,14 @@ export function DocsContent() {
   const [searchText, setSearchText] = useState('')
 
   const doc = useMemo(() => {
+    const runtimeOrigin =
+      typeof window !== 'undefined' && window.location.origin !== 'null'
+        ? window.location.origin
+        : ''
     const baseUrl =
+      runtimeOrigin ||
       DOC_SOURCE.spec.servers?.[0]?.url?.replace(/\/$/, '') ||
-      (typeof window !== 'undefined' ? window.location.origin : '')
+      ''
     return buildDocModel(DOC_SOURCE, baseUrl)
   }, [])
 

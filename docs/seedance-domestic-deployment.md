@@ -2,6 +2,28 @@
 
 本文说明如何部署渠道类型 59（Seedance Domestic），以及如何通过 `hwdrama-proxy` 公开五个素材接口。示例上游为 `https://api.laomandi.com`。
 
+## 公网 IP HTTPS 入口
+
+需要在域名尚不可用时直接通过公网 IP 提供服务，可使用 [seedance-domestic-caddy.example](seedance-domestic-caddy.example) 中的 Caddy 配置。该配置让域名和公网 IP 复用完全相同的 API、素材代理和 `/apidocs/` 路由，同时为公网 IP 向 Let's Encrypt 申请受信任的短期证书。
+
+部署时必须满足：
+
+- Caddy 支持 ACME `profile shortlived`，本次生产验证使用 `v2.11.4`。
+- TCP 80、443 均能从公网访问；80 用于 ACME HTTP-01 校验，不能只开放 443。
+- Caddy 的 `/data` 使用持久卷，否则重建容器会丢失证书状态和 ACME 账户。
+- 保留全局 `default_sni 124.174.0.221`。多数客户端连接字面 IP 时不会发送 SNI；没有该项时，即使证书已签发，`https://124.174.0.221` 仍可能在 TLS 握手阶段失败。
+- IP 证书有效期约 6 天，必须由 Caddy 持续自动续期，不能使用人工复制后长期不维护的证书文件。
+
+修改 Caddyfile 后先执行配置校验，再重载或重建 Caddy。客户端验证不得使用 `-k`：
+
+```bash
+docker exec new-api-seedance-caddy-1 caddy validate --config /etc/caddy/Caddyfile
+curl --fail --show-error https://124.174.0.221/api/status
+curl --fail --show-error https://124.174.0.221/apidocs/
+```
+
+不要用明文 `http://<IP>` 传输 API Key，也不要用 `tls internal` 作为客户公网入口；前者会泄露凭证，后者要求所有客户额外安装私有根证书。
+
 ## 1. 创建 new-api 渠道
 
 在管理后台新建渠道并填写：

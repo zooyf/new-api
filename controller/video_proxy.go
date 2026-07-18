@@ -20,6 +20,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const privateVideoCacheControl = "private, no-store"
+
 // videoProxyError returns a standardized OpenAI-style error response.
 func videoProxyError(c *gin.Context, status int, errType, message string) {
 	c.JSON(status, gin.H{
@@ -153,6 +155,12 @@ func VideoProxy(c *gin.Context) {
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy request")
 		return
 	}
+	if rangeHeader := c.GetHeader("Range"); rangeHeader != "" {
+		req.Header.Set("Range", rangeHeader)
+	}
+	if ifRangeHeader := c.GetHeader("If-Range"); ifRangeHeader != "" {
+		req.Header.Set("If-Range", ifRangeHeader)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -162,7 +170,7 @@ func VideoProxy(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Upstream returned status %d for %s", resp.StatusCode, videoURL))
 		videoProxyError(c, http.StatusBadGateway, "server_error",
 			fmt.Sprintf("Upstream service returned status %d", resp.StatusCode))
@@ -175,7 +183,7 @@ func VideoProxy(c *gin.Context) {
 		}
 	}
 
-	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	c.Writer.Header().Set("Cache-Control", privateVideoCacheControl)
 	c.Writer.WriteHeader(resp.StatusCode)
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
@@ -209,7 +217,7 @@ func writeVideoDataURL(c *gin.Context, dataURL string) error {
 	}
 
 	c.Writer.Header().Set("Content-Type", mimeType)
-	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	c.Writer.Header().Set("Cache-Control", privateVideoCacheControl)
 	c.Writer.WriteHeader(http.StatusOK)
 	_, err = c.Writer.Write(videoBytes)
 	return err

@@ -2,13 +2,17 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Nexus Reach Seedance 2.0 API",
-    "version": "2026-07-17",
+    "version": "2026-07-18",
     "description": "Seedance 2.0 国内视频生成与素材资产接口。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。"
   },
   "servers": [
     {
+      "url": "https://124.174.0.221",
+      "description": "Nexus Reach 公网 IP HTTPS 入口"
+    },
+    {
       "url": "https://gateway.nexus-reach.com",
-      "description": "Nexus Reach API Gateway"
+      "description": "Nexus Reach 域名入口（完成备案或网络放行后使用）"
     }
   ],
   "security": [
@@ -19,7 +23,7 @@
   "tags": [
     {
       "name": "视频生成",
-      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。创建任务后保存返回的 `task_id`，再通过查询接口轮询状态。视频生成通常需要数分钟；成功后返回临时下载地址，请及时下载并保存。\n\n人民币基础报价（单位：元/百万 tokens）：\n\n| 分辨率 | 无输入视频 | 含输入视频 |\n| --- | ---: | ---: |\n| 720p | ¥46 | ¥28 |\n| 1080p | ¥51 | ¥31 |\n| 4K | ¥26（计划价） | ¥16（计划价） |\n\n费用公式：`实际费用（人民币）= 最终 total_tokens ÷ 1,000,000 × 对应人民币单价`。例如，720p 无输入视频任务最终使用 87,277 tokens，则费用为 `87,277 ÷ 1,000,000 × ¥46 = ¥4.014742`。仅成功任务按最终实际用量结算；如商务合同另有约定，以合同为准。4K 需要单独确认渠道已开通，且当前尚未完成端到端验证，因此暂不在 `resolution` 的公开可用枚举中。"
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。国内 Seedance 的推荐调用顺序为：`POST /v1/video/generations` 创建任务，`GET /v1/video/generations/{task_id}` 轮询状态，任务成功后通过 `GET /v1/videos/{task_id}/content` 下载视频。`GET /v1/videos/{task_id}` 仅作为 OpenAI 格式的查询别名；OpenAI/Sora 的 `POST /v1/videos` multipart 创建协议不属于本接口契约，请勿混用。视频生成通常需要数分钟，视频文件依赖上游临时资源，请及时下载并保存。提交任务时会按请求规格预扣估算额度；任务成功且供应商账单可查询后，系统使用最终 `total_tokens` 自动补扣或退回差额。查询和下载接口不会重复收取生成费用。\n\n人民币基础报价（单位：元/百万 tokens）：\n\n| 分辨率 | 无输入视频 | 含输入视频 |\n| --- | ---: | ---: |\n| 720p | ¥46 | ¥28 |\n| 1080p | ¥51 | ¥31 |\n| 4K | ¥26（计划价） | ¥16（计划价） |\n\n费用公式：`实际费用（人民币）= 最终 total_tokens ÷ 1,000,000 × 对应人民币单价`。例如，720p 无输入视频任务最终使用 87,277 tokens，则费用为 `87,277 ÷ 1,000,000 × ¥46 = ¥4.014742`。仅成功任务按最终实际用量结算；如商务合同另有约定，以合同为准。4K 需要单独确认渠道已开通，且当前尚未完成端到端验证，因此暂不在 `resolution` 的公开可用枚举中。"
     },
     {
       "name": "真人认证",
@@ -36,7 +40,7 @@
         "tags": ["视频生成"],
         "summary": "创建 Seedance 2.0 视频任务",
         "operationId": "createSeedanceDomesticVideo",
-        "description": "支持文本、图片、视频和音频组合输入。`content` 中最多包含 9 张图片、3 个视频和 3 个音频；音频不能单独作为输入。使用素材库资源时，将 `asset://<AssetId>` 写入对应媒体对象的 `url` 字段。提示词应按媒体在 `content` 中出现的顺序使用“图片1、图片2、视频1”等称呼，禁止直接在提示词中填写 AssetId。",
+        "description": "这是国内 Seedance 特殊 JSON 格式的唯一推荐创建入口，请使用 `Content-Type: application/json`，不要改用 OpenAI/Sora 的 `POST /v1/videos` multipart 协议。支持文本、图片、视频和音频组合输入。`content` 中最多包含 9 张图片、3 个视频和 3 个音频；音频不能单独作为输入。使用素材库资源时，将 `asset://<AssetId>` 写入对应媒体对象的 `url` 字段。提示词应按媒体在 `content` 中出现的顺序使用“图片1、图片2、视频1”等称呼，禁止直接在提示词中填写 AssetId。",
         "requestBody": {
           "required": true,
           "content": {
@@ -92,14 +96,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/TaskErrorResponse"
                 },
                 "example": {
-                  "error": {
-                    "message": "dur must be -1 or an integer between 4 and 15",
-                    "type": "invalid_request_error",
-                    "code": "invalid_request"
-                  }
+                  "code": "invalid_request",
+                  "message": "dur must be -1 or an integer between 4 and 15",
+                  "data": null
                 }
               }
             }
@@ -107,8 +109,28 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "429": { "$ref": "#/components/responses/RateLimited" },
+          "413": {
+            "description": "请求体超过网关允许的大小。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskErrorResponse"
+                }
+              }
+            }
+          },
           "500": { "$ref": "#/components/responses/InternalError" },
-          "502": { "$ref": "#/components/responses/UpstreamError" }
+          "502": { "$ref": "#/components/responses/UpstreamError" },
+          "503": {
+            "description": "当前账号分组没有可用的国内 Seedance 渠道。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -117,7 +139,7 @@
         "tags": ["视频生成"],
         "summary": "查询视频任务",
         "operationId": "getSeedanceDomesticVideo",
-        "description": "使用创建接口返回的 `task_id` 轮询任务状态。`SUCCESS` 表示完成，`FAILURE` 表示失败，`UNKNOWN` 表示暂时无法确认；其他状态表示仍在排队或生成中。成功后从 `data.result_url` 获取临时视频下载地址。下载地址存在时效限制，请立即保存到自己的存储。",
+        "description": "这是国内 Seedance 的推荐轮询入口。使用创建接口返回的 `task_id` 查询状态：`SUCCESS` 表示完成，`FAILURE` 表示失败，`UNKNOWN` 表示暂时无法确认；其他状态表示仍在排队或生成中。`data.result_url` 是兼容字段，可能包含上游临时签名地址；调用方不应依赖其域名或长期有效性。任务成功后，推荐使用同一 Nexus Reach 账号下的 API Key 调用 `GET /v1/videos/{task_id}/content` 获取视频文件，并立即保存到自己的存储。",
         "parameters": [
           {
             "name": "task_id",
@@ -144,7 +166,7 @@
                     "task_id": "task_01jzseedanceexample",
                     "status": "SUCCESS",
                     "fail_reason": "",
-                    "result_url": "https://cdn.example.invalid/seedance/results/task_01jzseedanceexample.mp4?expires=1784173800&signature=example",
+                    "result_url": "https://provider.example.invalid/seedance/results/task_01jzseedanceexample.mp4?expires=1784173800&signature=example",
                     "submit_time": 1784169600,
                     "start_time": 1784169620,
                     "finish_time": 1784170200,
@@ -155,27 +177,220 @@
             }
           },
           "400": {
-            "description": "任务不存在或不属于当前 API Key。",
+            "description": "任务不存在或不属于当前 Nexus Reach 账号。",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/TaskErrorResponse"
                 },
                 "example": {
-                  "error": {
-                    "message": "task_not_exist",
-                    "type": "invalid_request_error",
-                    "code": "task_not_exist"
-                  }
+                  "code": "task_not_exist",
+                  "message": "task_not_exist",
+                  "data": null
                 }
               }
             }
           },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
-          "429": { "$ref": "#/components/responses/RateLimited" },
           "500": { "$ref": "#/components/responses/InternalError" },
-          "502": { "$ref": "#/components/responses/UpstreamError" }
+          "503": {
+            "description": "任务绑定的渠道当前不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/{task_id}": {
+      "get": {
+        "tags": ["视频生成"],
+        "summary": "兼容查询视频任务（OpenAI 格式）",
+        "operationId": "getSeedanceDomesticVideoOpenAI",
+        "description": "使用与 `GET /v1/video/generations/{task_id}` 相同的公开任务 ID，但将状态转换为 OpenAI Video 格式：`queued`、`in_progress`、`completed` 或 `failed`。这是查询响应的兼容别名，不代表国内 Seedance 支持 OpenAI/Sora 的 `POST /v1/videos` multipart 创建协议。下载视频时仍推荐调用 `GET /v1/videos/{task_id}/content`。",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "创建任务时返回的公开任务 ID。",
+            "schema": {
+              "type": "string"
+            },
+            "example": "task_01jzseedanceexample"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OpenAI Video 格式的任务状态。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenAIVideoTaskResponse"
+                },
+                "example": {
+                  "id": "task_01jzseedanceexample",
+                  "task_id": "task_01jzseedanceexample",
+                  "object": "video",
+                  "model": "doubao-seedance-2-0-260128",
+                  "status": "completed",
+                  "progress": 100,
+                  "created_at": 1784169600,
+                  "completed_at": 1784170200,
+                  "metadata": {
+                    "url": "https://provider.example.invalid/seedance/results/task_01jzseedanceexample.mp4?expires=1784173800&signature=example"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "任务不存在或不属于当前 Nexus Reach 账号。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskErrorResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": {
+            "description": "任务绑定的渠道当前不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/{task_id}/content": {
+      "get": {
+        "tags": ["视频生成"],
+        "summary": "下载生成的视频",
+        "operationId": "downloadSeedanceDomesticVideo",
+        "description": "这是 Nexus Reach 网关提供的本地视频代理接口，不是上游供应商接口。它根据公开 `task_id` 获取任务保存的上游结果并流式返回；只有属于当前 Nexus Reach 账号且状态为 `SUCCESS` 的任务才能下载。响应的 `Content-Type` 由上游视频资源决定，通常为 `video/mp4`，也可能是 `application/octet-stream` 或 `text/plain`。响应禁止共享缓存；由于上游资源可能过期，任务完成后应尽快下载并保存。支持 Range 请求。",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "创建任务时返回的公开任务 ID。",
+            "schema": {
+              "type": "string"
+            },
+            "example": "task_01jzseedanceexample"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "视频文件流。Content-Type 通常为 video/mp4，以实际响应头为准。",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Range 请求返回的部分视频内容，并保留 Content-Range、Accept-Ranges 等上游响应头。",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "任务尚未完成。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoContentErrorResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": {
+            "description": "视频资源地址被安全策略拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoContentErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "任务不存在或不属于当前 Nexus Reach 账号。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoContentErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "网关读取任务或构建代理请求失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoContentErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "上游视频资源不可访问或返回异常状态。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoContentErrorResponse"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -193,7 +408,7 @@
                 "$ref": "#/components/schemas/CreateVisualValidateSessionRequest"
               },
               "example": {
-                "CallbackURL": "https://gateway.nexus-reach.com/apidocs/apidocs-example-callback.html"
+                "CallbackURL": "https://124.174.0.221/apidocs/apidocs-example-callback.html"
               }
             }
           }
@@ -213,7 +428,7 @@
                     "Result": {
                       "BytedToken": "20260716120000-example-token",
                       "H5Link": "https://verify.example.invalid/session?bytedToken=20260716120000-example-token&lng=zh",
-                      "CallbackURL": "https://gateway.nexus-reach.com/apidocs/apidocs-example-callback.html"
+                      "CallbackURL": "https://124.174.0.221/apidocs/apidocs-example-callback.html"
                     }
                   },
                   "error": null
@@ -800,7 +1015,96 @@
           "start_time",
           "finish_time",
           "progress"
+        ],
+        "additionalProperties": false
+      },
+      "OpenAIVideoTaskResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "公开任务 ID。"
+          },
+          "task_id": {
+            "type": "string",
+            "description": "兼容任务 ID 字段，与 id 相同。"
+          },
+          "object": {
+            "type": "string",
+            "enum": ["video"]
+          },
+          "model": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "in_progress", "completed", "failed"]
+          },
+          "progress": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "created_at": {
+            "type": "integer",
+            "description": "Unix 时间戳。"
+          },
+          "completed_at": {
+            "type": "integer",
+            "description": "任务记录最后更新时间，Unix 时间戳。"
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "兼容结果地址，可能是临时签名 URL；推荐使用内容下载接口。"
+              }
+            },
+            "required": ["url"]
+          },
+          "error": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["code", "message"]
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "object",
+          "model",
+          "status",
+          "progress",
+          "created_at",
+          "metadata"
         ]
+      },
+      "VideoContentErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": ["message", "type"]
+          }
+        },
+        "required": ["error"]
       },
       "CreateVisualValidateSessionRequest": {
         "type": "object",
@@ -1081,7 +1385,7 @@
                 "description": "素材状态更新时间，ISO 8601 UTC。"
               }
             },
-            "required": ["Id", "URL", "AssetType", "GroupId", "Status"]
+            "required": ["Id", "AssetType", "GroupId", "Status"]
           },
           "error": {
             "$ref": "#/components/schemas/BusinessErrorMessages"
@@ -1109,6 +1413,23 @@
           }
         },
         "required": ["error"]
+      },
+      "TaskErrorResponse": {
+        "type": "object",
+        "description": "视频任务控制器返回的错误格式。它与鉴权中间件返回的 error 包装格式不同。",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "nullable": true
+          }
+        },
+        "required": ["code", "message", "data"],
+        "additionalProperties": false
       }
     }
   }
