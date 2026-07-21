@@ -19,6 +19,7 @@ type volcengineTool struct {
 
 type volcengineSubmitRequest struct {
 	Model                 string                  `json:"model"`
+	Prompt                string                  `json:"prompt,omitempty"`
 	Content               []volcengineContentItem `json:"content,omitempty"`
 	CallbackURL           string                  `json:"callback_url,omitempty"`
 	ReturnLastFrame       *bool                   `json:"return_last_frame,omitempty"`
@@ -30,6 +31,7 @@ type volcengineSubmitRequest struct {
 	SafetyIdentifier      string                  `json:"safety_identifier,omitempty"`
 	Priority              *int                    `json:"priority,omitempty"`
 	Resolution            string                  `json:"resolution,omitempty"`
+	Size                  string                  `json:"size,omitempty"`
 	Ratio                 string                  `json:"ratio,omitempty"`
 	Duration              *int                    `json:"duration,omitempty"`
 	Frames                *int                    `json:"frames,omitempty"`
@@ -39,11 +41,12 @@ type volcengineSubmitRequest struct {
 }
 
 type newAPIVideoRequest struct {
-	Model    string         `json:"model"`
-	Prompt   string         `json:"prompt"`
-	Images   []string       `json:"images,omitempty"`
-	Duration int            `json:"duration,omitempty"`
-	Metadata map[string]any `json:"metadata,omitempty"`
+	Model      string         `json:"model"`
+	Prompt     string         `json:"prompt"`
+	Images     []string       `json:"images,omitempty"`
+	Resolution string         `json:"resolution,omitempty"`
+	Duration   int            `json:"duration,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 type volcengineSubmitResponse struct {
@@ -51,21 +54,25 @@ type volcengineSubmitResponse struct {
 }
 
 type volcengineTaskResponse struct {
-	ID              string                `json:"id"`
-	Model           string                `json:"model,omitempty"`
-	Status          string                `json:"status"`
-	Content         volcengineTaskContent `json:"content"`
-	Seed            int                   `json:"seed,omitempty"`
-	Resolution      string                `json:"resolution,omitempty"`
-	Duration        int                   `json:"duration,omitempty"`
-	Ratio           string                `json:"ratio,omitempty"`
-	FramesPerSecond int                   `json:"framespersecond,omitempty"`
-	ServiceTier     string                `json:"service_tier,omitempty"`
-	Tools           []volcengineTool      `json:"tools,omitempty"`
-	Usage           volcengineTaskUsage   `json:"usage,omitempty"`
-	Error           *volcengineTaskError  `json:"error,omitempty"`
-	CreatedAt       int64                 `json:"created_at,omitempty"`
-	UpdatedAt       int64                 `json:"updated_at,omitempty"`
+	ID                    string                `json:"id"`
+	Model                 string                `json:"model,omitempty"`
+	Status                string                `json:"status"`
+	Content               volcengineTaskContent `json:"content"`
+	Seed                  int                   `json:"seed,omitempty"`
+	Resolution            string                `json:"resolution,omitempty"`
+	Duration              int                   `json:"duration,omitempty"`
+	Ratio                 string                `json:"ratio,omitempty"`
+	FramesPerSecond       int                   `json:"framespersecond,omitempty"`
+	ServiceTier           string                `json:"service_tier,omitempty"`
+	ExecutionExpiresAfter *int                  `json:"execution_expires_after,omitempty"`
+	GenerateAudio         *bool                 `json:"generate_audio,omitempty"`
+	Draft                 *bool                 `json:"draft,omitempty"`
+	Priority              *int                  `json:"priority,omitempty"`
+	Tools                 []volcengineTool      `json:"tools,omitempty"`
+	Usage                 volcengineTaskUsage   `json:"usage,omitempty"`
+	Error                 *volcengineTaskError  `json:"error,omitempty"`
+	CreatedAt             int64                 `json:"created_at,omitempty"`
+	UpdatedAt             int64                 `json:"updated_at,omitempty"`
 }
 
 type volcengineTaskContent struct {

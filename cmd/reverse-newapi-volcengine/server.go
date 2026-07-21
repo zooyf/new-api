@@ -14,11 +14,13 @@ import (
 )
 
 const (
-	newAPISubmitEndpoint          = "/v1/video/generations"
-	newAPIFetchEndpointBase       = "/v1/video/generations/"
-	volcengineSubmitEndpoint      = "/api/v3/contents/generations/tasks"
-	volcengineFetchEndpointBase   = "/api/v3/contents/generations/tasks/"
-	defaultMaxBodySize            = 32 << 20
+	newAPISubmitEndpoint              = "/v1/video/generations"
+	newAPIFetchEndpointBase           = "/v1/video/generations/"
+	seedanceOverseasSubmitEndpoint    = "/v1/seedance/video/generations"
+	seedanceOverseasFetchEndpointBase = "/v1/seedance/video/generations/"
+	volcengineSubmitEndpoint          = "/api/v3/contents/generations/tasks"
+	volcengineFetchEndpointBase       = "/api/v3/contents/generations/tasks/"
+	defaultMaxBodySize                = 32 << 20
 )
 
 type reverseServer struct {
@@ -38,6 +40,8 @@ func newServer(cfg config) http.Handler {
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc(newAPISubmitEndpoint, s.handleSubmit)
 	mux.HandleFunc(newAPIFetchEndpointBase, s.handleFetch)
+	mux.HandleFunc(seedanceOverseasSubmitEndpoint, s.handleSubmit)
+	mux.HandleFunc(seedanceOverseasFetchEndpointBase, s.handleFetch)
 	mux.HandleFunc(volcengineSubmitEndpoint, s.handleSubmit)
 	mux.HandleFunc(volcengineFetchEndpointBase, s.handleFetch)
 	return mux
@@ -67,6 +71,9 @@ func (s *reverseServer) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newAPIReq, err := convertSubmitRequest(body)
+	if r.URL.Path == seedanceOverseasSubmitEndpoint {
+		newAPIReq, err = convertSeedanceOverseasSubmitRequest(body)
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -143,11 +150,18 @@ func (s *reverseServer) handleFetch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "invalid_response", err.Error())
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, seedanceOverseasFetchEndpointBase) {
+		volcResp.Model = toSeedanceOverseasResponseModel(volcResp.Model)
+	}
 	writeJSON(w, http.StatusOK, volcResp)
 }
 
 func taskIDFromPath(path string) (string, bool) {
-	for _, prefix := range []string{newAPIFetchEndpointBase, volcengineFetchEndpointBase} {
+	for _, prefix := range []string{
+		newAPIFetchEndpointBase,
+		seedanceOverseasFetchEndpointBase,
+		volcengineFetchEndpointBase,
+	} {
 		if strings.HasPrefix(path, prefix) {
 			return strings.TrimPrefix(path, prefix), true
 		}

@@ -8,6 +8,14 @@ import (
 )
 
 func convertSubmitRequest(body []byte) (newAPIVideoRequest, error) {
+	return convertSubmitRequestWithModel(body, false)
+}
+
+func convertSeedanceOverseasSubmitRequest(body []byte) (newAPIVideoRequest, error) {
+	return convertSubmitRequestWithModel(body, true)
+}
+
+func convertSubmitRequestWithModel(body []byte, normalizeOverseasModel bool) (newAPIVideoRequest, error) {
 	var req volcengineSubmitRequest
 	if err := common.Unmarshal(body, &req); err != nil {
 		return newAPIVideoRequest{}, fmt.Errorf("invalid JSON body: %w", err)
@@ -16,6 +24,9 @@ func convertSubmitRequest(body []byte) (newAPIVideoRequest, error) {
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
 		return newAPIVideoRequest{}, fmt.Errorf("model is required")
+	}
+	if normalizeOverseasModel {
+		model = normalizeSeedanceOverseasRequestModel(model)
 	}
 
 	promptParts := make([]string, 0, len(req.Content))
@@ -28,9 +39,12 @@ func convertSubmitRequest(body []byte) (newAPIVideoRequest, error) {
 			images = append(images, strings.TrimSpace(item.ImageURL.URL))
 		}
 	}
-	prompt := strings.Join(promptParts, "\n")
+	prompt := strings.TrimSpace(req.Prompt)
+	if prompt == "" {
+		prompt = strings.Join(promptParts, "\n")
+	}
 	if strings.TrimSpace(prompt) == "" {
-		return newAPIVideoRequest{}, fmt.Errorf("content text is required")
+		return newAPIVideoRequest{}, fmt.Errorf("prompt is required")
 	}
 
 	var raw map[string]any
@@ -38,17 +52,46 @@ func convertSubmitRequest(body []byte) (newAPIVideoRequest, error) {
 		return newAPIVideoRequest{}, fmt.Errorf("invalid JSON body: %w", err)
 	}
 	delete(raw, "model")
+	delete(raw, "prompt")
+
+	resolution := strings.TrimSpace(req.Resolution)
+	if resolution == "" {
+		resolution = strings.TrimSpace(req.Size)
+	}
 
 	out := newAPIVideoRequest{
-		Model:    model,
-		Prompt:   prompt,
-		Images:   images,
-		Metadata: raw,
+		Model:      model,
+		Prompt:     prompt,
+		Images:     images,
+		Resolution: resolution,
+		Metadata:   raw,
 	}
 	if req.Duration != nil {
 		out.Duration = *req.Duration
 	}
 	return out, nil
+}
+
+func normalizeSeedanceOverseasRequestModel(model string) string {
+	switch model {
+	case "dreamina-seedance-2-0-260128", "dreamina-seedance-2-0-ep":
+		return "doubao-seedance-2-0-filter-off"
+	case "dreamina-seedance-2-0-fast-260128", "dreamina-seedance-2-0-fast-ep":
+		return "doubao-seedance-2-0-fast-filter-off"
+	default:
+		return model
+	}
+}
+
+func toSeedanceOverseasResponseModel(model string) string {
+	switch model {
+	case "doubao-seedance-2-0-filter-off", "dreamina-seedance-2-0-ep", "dreamina-seedance-2-0-260128":
+		return "doubao-seedance-2-0-260128"
+	case "doubao-seedance-2-0-fast-filter-off", "dreamina-seedance-2-0-fast-ep", "dreamina-seedance-2-0-fast-260128":
+		return "doubao-seedance-2-0-fast-260128"
+	default:
+		return model
+	}
 }
 
 func convertSubmitResponse(body []byte) (volcengineSubmitResponse, error) {
@@ -211,6 +254,18 @@ func applyVolcengineTaskFields(out *volcengineTaskResponse, source map[string]an
 	if out.ServiceTier == "" {
 		out.ServiceTier = firstString(source, "service_tier")
 	}
+	if out.ExecutionExpiresAfter == nil {
+		out.ExecutionExpiresAfter = intPointer(source, "execution_expires_after")
+	}
+	if out.GenerateAudio == nil {
+		out.GenerateAudio = boolPointer(source, "generate_audio")
+	}
+	if out.Draft == nil {
+		out.Draft = boolPointer(source, "draft")
+	}
+	if out.Priority == nil {
+		out.Priority = intPointer(source, "priority")
+	}
 	if len(out.Tools) == 0 {
 		out.Tools = toolsFromSource(source["tools"])
 	}
@@ -360,6 +415,27 @@ func intValue(value any) int {
 	default:
 		return 0
 	}
+}
+
+func intPointer(source map[string]any, key string) *int {
+	value, ok := source[key]
+	if !ok || value == nil {
+		return nil
+	}
+	parsed := intValue(value)
+	return &parsed
+}
+
+func boolPointer(source map[string]any, key string) *bool {
+	value, ok := source[key]
+	if !ok || value == nil {
+		return nil
+	}
+	parsed, ok := value.(bool)
+	if !ok {
+		return nil
+	}
+	return &parsed
 }
 
 func int64Value(value any) int64 {
