@@ -50,6 +50,7 @@ export interface OpenApiParameter {
   description?: string
   required?: boolean
   deprecated?: boolean
+  example?: unknown
   schema?: OpenApiSchema
 }
 
@@ -139,7 +140,7 @@ export interface DocEndpoint {
   searchText: string
 }
 
-/** Endpoints grouped by their primary tag. */
+/** Endpoints grouped by every tag declared on the OpenAPI operation. */
 export interface DocGroup {
   id: string
   title: string

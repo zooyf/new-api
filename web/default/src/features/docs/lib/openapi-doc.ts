@@ -291,15 +291,26 @@ function buildCurl(
   baseUrl: string,
   path: string,
   contentType: string,
-  example: unknown
+  example: unknown,
+  parameters: OpenApiOperation['parameters']
 ): DocExample {
   const hasBody = example !== undefined
+  let examplePath = path
+  for (const parameter of parameters ?? []) {
+    if (parameter.in !== 'path') continue
+    const value = parameter.example ?? parameter.schema?.example
+    if (value === undefined) continue
+    examplePath = examplePath.replaceAll(
+      `{${parameter.name}}`,
+      encodeURIComponent(String(value))
+    )
+  }
   const data =
     typeof example === 'string'
       ? example
       : JSON.stringify(example ?? {}, undefined, 2)
   const lines = [
-    `curl --location '${baseUrl}${path}'`,
+    `curl --location '${baseUrl}${examplePath}'`,
     "  --header 'Authorization: Bearer sk-your-key'",
   ]
   if (hasBody) {
@@ -314,9 +325,9 @@ function buildEndpoint(
   baseUrl: string,
   method: string,
   path: string,
-  operation: OpenApiOperation
+  operation: OpenApiOperation,
+  tag: string
 ): DocEndpoint {
-  const tag = operation.tags?.[0] ?? 'Default'
   const request = extractRequest(spec, operation)
   const response = extractResponse(spec, operation)
   const requestExample = buildExample('request-json', 'JSON', request.example)
@@ -338,7 +349,10 @@ function buildEndpoint(
   ]
 
   return {
-    id: endpointId(method, path),
+    id:
+      tag === (operation.tags?.[0] ?? 'Default')
+        ? endpointId(method, path)
+        : `${endpointId(method, path)}-${hashString(tag)}`,
     method,
     path,
     summary: operation.summary || operation.operationId || path,
@@ -360,7 +374,13 @@ function buildEndpoint(
     responseFields: response.fields,
     requestExamples: requestExample ? [requestExample] : [],
     responseExamples: responseExample ? [responseExample] : [],
-    curlExample: buildCurl(baseUrl, path, request.contentType, request.example),
+    curlExample: buildCurl(
+      baseUrl,
+      path,
+      request.contentType,
+      request.example,
+      operation.parameters
+    ),
     searchText: searchParts.filter(Boolean).join(' ').toLowerCase(),
   }
 }
@@ -371,18 +391,34 @@ function buildEndpoint(
  */
 export function buildDocModel(source: DocSource, baseUrl: string): DocModel {
   const spec = source.spec
-  const endpoints = Object.entries(spec.paths ?? {})
+  const operations = Object.entries(spec.paths ?? {})
     .flatMap(([path, item]) =>
       HTTP_METHODS.flatMap((method) => {
         const operation = item[method]
         return operation ? [{ method, path, operation }] : []
       })
     )
-    .filter(({ operation }) => !isExcludedTag(operation.tags?.[0] ?? ''))
-    .map(({ method, path, operation }) =>
-      buildEndpoint(spec, baseUrl, method.toUpperCase(), path, operation)
+    .filter(({ operation }) =>
+      (operation.tags?.length ? operation.tags : ['Default']).some(
+        (tag) => !isExcludedTag(tag)
+      )
     )
-    .filter((endpoint) => !isExcludedTag(endpoint.tag))
+
+  const endpoints = operations
+    .flatMap(({ method, path, operation }) =>
+      (operation.tags?.length ? operation.tags : ['Default'])
+        .filter((tag) => !isExcludedTag(tag))
+        .map((tag) =>
+          buildEndpoint(
+            spec,
+            baseUrl,
+            method.toUpperCase(),
+            path,
+            operation,
+            tag
+          )
+        )
+    )
     .sort(
       (a, b) =>
         compareTags(spec, a.tag, b.tag) ||
@@ -396,8 +432,13 @@ export function buildDocModel(source: DocSource, baseUrl: string): DocModel {
   const groupsByTag = new Map<string, DocGroup>()
   const methodCounts: Record<string, number> = {}
 
+  for (const { method } of operations) {
+    const normalizedMethod = method.toUpperCase()
+    methodCounts[normalizedMethod] =
+      (methodCounts[normalizedMethod] ?? 0) + 1
+  }
+
   for (const endpoint of endpoints) {
-    methodCounts[endpoint.method] = (methodCounts[endpoint.method] ?? 0) + 1
     const group = groupsByTag.get(endpoint.tag) ?? {
       id: `tag:${endpoint.tag}`,
       title: endpoint.tag,
@@ -416,7 +457,7 @@ export function buildDocModel(source: DocSource, baseUrl: string): DocModel {
     source,
     groups,
     endpoints,
-    endpointCount: endpoints.length,
+    endpointCount: operations.length,
     methodCounts,
   }
 }

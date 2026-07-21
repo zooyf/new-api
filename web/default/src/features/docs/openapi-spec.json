@@ -1208,8 +1208,8 @@
         "description": "提交 Seedance 海外视频生成任务，支持文生视频和图生视频。返回的是网关生成的下游任务 ID，可通过 GET /v1/video/generations/{task_id} 查询。\n\n使用素材库时，将已处于 Active 状态的素材 ID 写成 asset://asset-xxx，放入 metadata.content[].image_url.url。输出比例必须传 metadata.ratio；不要只传顶层 ratio 或 aspect_ratio。每个参考素材必须显式填写 role，例如首帧图片使用 first_frame，多图参考使用 reference_image，参考视频使用 reference_video，参考音频使用 reference_audio。",
         "operationId": "createVideoGeneration",
         "tags": [
-          "Seedance 海外全套 API",
-          "视频生成"
+          "视频生成",
+          "Seedance 海外全套 API"
         ],
         "parameters": [],
         "requestBody": {
@@ -1288,8 +1288,8 @@
         "description": "使用创建接口返回的下游任务 ID 查询任务。data.status 是网关统一任务状态；data.data.status 保留上游原始状态。成功后视频地址位于 data.result_url，也可从 data.data.content.video_url 读取。结果 URL 通常带有效期，请及时下载或转存。",
         "operationId": "getVideoGeneration",
         "tags": [
-          "Seedance 海外全套 API",
-          "视频生成"
+          "视频生成",
+          "Seedance 海外全套 API"
         ],
         "parameters": [
           {
@@ -3681,10 +3681,8 @@
                       {
                         "Id": "group-20260721025649-qduuh",
                         "Name": "seedance-overseas-demo",
-                        "Description": "Seedance 海外视频测试素材组",
                         "GroupType": "aigc",
-                        "CreatedAt": 1784602609,
-                        "UpdatedAt": 1784603691
+                        "CreatedAt": 1784602609
                       }
                     ],
                     "TotalCount": 1,
@@ -3846,7 +3844,7 @@
                   "Result": {
                     "Id": "group-20260721025649-qduuh",
                     "Name": "seedance-overseas-demo-updated",
-                    "Description": "Seedance 海外视频测试素材组",
+                    "Description": "更新后的 Seedance 海外视频测试素材组",
                     "GroupType": "aigc",
                     "CreatedAt": 1784602609,
                     "UpdatedAt": 1784603691
@@ -4022,12 +4020,9 @@
                         "Id": "asset-20260721105649-44xzr",
                         "GroupId": "group-20260721025649-qduuh",
                         "Name": "seedance-reference-image",
-                        "Description": "Seedance 视频首帧参考图",
                         "AssetType": "Image",
                         "Status": "Active",
-                        "URL": "https://example.com/seedance-reference-image.jpg",
-                        "CreatedAt": 1784602609,
-                        "UpdatedAt": 1784603693
+                        "CreatedAt": 1784602609
                       }
                     ],
                     "TotalCount": 1,
@@ -4193,7 +4188,7 @@
                     "Id": "asset-20260721105649-44xzr",
                     "GroupId": "group-20260721025649-qduuh",
                     "Name": "seedance-reference-image-updated",
-                    "Description": "Seedance 视频首帧参考图",
+                    "Description": "更新后的 Seedance 视频首帧参考图",
                     "AssetType": "Image",
                     "Status": "Active",
                     "URL": "https://example.com/seedance-reference-image.jpg",
