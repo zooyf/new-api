@@ -83,7 +83,7 @@
     },
     {
       "name": "Seedance 海外全套 API",
-      "description": "参数和响应结构以 XFusionAI「Seedance 海外版」文档为基准。视频接口使用独立的 /v1/seedance/video/generations 官方风格，参数位于请求顶层；原 /v1/video/generations 兼容接口仍保留在「视频生成」分组。素材接口对外省略供应商内部 /ep/ 段，其余请求和响应字段保持一致。"
+      "description": "提供 Seedance 海外素材管理和视频生成接口。视频生成参数位于请求顶层，图像、视频和音频参考素材通过 content 传入。"
     },
     {
       "name": "移动视频素材库",
@@ -1284,7 +1284,7 @@
       "get": {
         "summary": "获取视频生成任务状态",
         "deprecated": false,
-        "description": "使用创建接口返回的下游任务 ID 查询任务。data.status 是网关统一任务状态；data.data.status 保留上游原始状态。成功后视频地址位于 data.result_url，也可从 data.data.content.video_url 读取。结果 URL 通常带有效期，请及时下载或转存。",
+        "description": "使用创建接口返回的任务 ID 查询任务。data.status 是统一任务状态，data.data.status 是任务处理状态。成功后视频地址位于 data.result_url，也可从 data.data.content.video_url 读取。结果 URL 通常带有效期，请及时下载或转存。",
         "operationId": "getVideoGeneration",
         "tags": [
           "视频生成"
@@ -1332,7 +1332,6 @@
                     "progress": "100%",
                     "properties": {
                       "input": "",
-                      "upstream_model_name": "dreamina-seedance-2-0-ep",
                       "origin_model_name": "doubao-seedance-2-0-filter-off"
                     },
                     "data": {
@@ -1350,7 +1349,7 @@
                       "framespersecond": 24,
                       "generate_audio": false,
                       "id": "task_VgWsT4LsVTvvyouTHBNNPA9jdoaEBTtq",
-                      "model": "dreamina-seedance-2-0-ep",
+                      "model": "doubao-seedance-2-0-filter-off",
                       "ratio": "1:1",
                       "resolution": "480p",
                       "seed": "6614",
@@ -3292,7 +3291,7 @@
       "post": {
         "summary": "上传素材",
         "deprecated": false,
-        "description": "向指定移动视频 AICC 素材组上传素材。assetUrl 必须能由上游服务通过公网访问；成功后保存响应 body 中的素材 ID。",
+        "description": "向指定移动视频 AICC 素材组上传素材。assetUrl 必须能够通过公网访问；成功后保存响应 body 中的素材 ID。",
         "operationId": "createCmccAICCAsset",
         "tags": [
           "移动视频素材库"
@@ -3509,7 +3508,7 @@
       "post": {
         "summary": "查询真人素材组",
         "deprecated": false,
-        "description": "使用真人认证会话返回的 bytedToken 查询认证后创建的真人素材组。必须先在 h5Link 中完成真人认证；认证尚未完成时，上游会返回业务错误。",
+        "description": "使用真人认证会话返回的 bytedToken 查询认证后创建的真人素材组。必须先在 h5Link 中完成真人认证；认证尚未完成时接口会返回业务错误。",
         "operationId": "getCmccAICCRealPersonAssetGroupByBytedToken",
         "tags": [
           "移动视频真人认证"
@@ -3555,7 +3554,7 @@
       "post": {
         "summary": "创建素材组",
         "deprecated": false,
-        "description": "创建一个素材组以管理和分类您的人像素材。\n\n供应商原始 Endpoint 为 POST /v1/seedance/oversea/ep/CreateAssetGroup；本平台对外固定省略 /ep/ 路径段。",
+        "description": "创建一个素材组以管理和分类您的人像素材。",
         "operationId": "seedanceOverseasCreateAssetGroup",
         "tags": [
           "Seedance 海外全套 API"
@@ -3577,7 +3576,7 @@
         },
         "responses": {
           "200": {
-            "description": "成功，响应保持上游原始字段格式。",
+            "description": "成功返回素材组信息。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3604,7 +3603,7 @@
             }
           },
           "400": {
-            "description": "请求参数错误或上游拒绝请求。",
+            "description": "请求参数错误或请求未被接受。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3635,7 +3634,7 @@
       "post": {
         "summary": "列表查询素材组",
         "deprecated": false,
-        "description": "分页查询您拥有的素材组列表。\n\n供应商原始 Endpoint 为 POST /v1/seedance/oversea/ep/ListAssetGroups；本平台对外固定省略 /ep/ 路径段。",
+        "description": "分页查询您拥有的素材组列表。",
         "operationId": "seedanceOverseasListAssetGroups",
         "tags": [
           "Seedance 海外全套 API"
@@ -3660,7 +3659,7 @@
         },
         "responses": {
           "200": {
-            "description": "成功，响应保持上游原始字段格式。",
+            "description": "成功返回素材组列表。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3692,7 +3691,7 @@
             }
           },
           "400": {
-            "description": "请求参数错误或上游拒绝请求。",
+            "description": "请求参数错误或请求未被接受。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3723,7 +3722,7 @@
       "post": {
         "summary": "获取素材组详情",
         "deprecated": false,
-        "description": "查询指定素材组的详细属性。\n\n供应商原始 Endpoint 为 POST /v1/seedance/oversea/ep/GetAssetGroup；本平台对外固定省略 /ep/ 路径段。",
+        "description": "查询指定素材组的详细属性。",
         "operationId": "seedanceOverseasGetAssetGroup",
         "tags": [
           "Seedance 海外全套 API"
@@ -3744,7 +3743,7 @@
         },
         "responses": {
           "200": {
-            "description": "成功，响应保持上游原始字段格式。",
+            "description": "成功返回素材组详情。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3771,7 +3770,7 @@
             }
           },
           "400": {
-            "description": "请求参数错误或上游拒绝请求。",
+            "description": "请求参数错误或请求未被接受。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3802,7 +3801,7 @@
       "post": {
         "summary": "更新素材组",
         "deprecated": false,
-        "description": "更新已有海外版素材组的名称或描述信息。\n\n供应商原始 Endpoint 为 POST /v1/seedance/oversea/ep/UpdateAssetGroup；本平台对外固定省略 /ep/ 路径段。",
+        "description": "更新已有海外版素材组的名称或描述信息。",
         "operationId": "seedanceOverseasUpdateAssetGroup",
         "tags": [
           "Seedance 海外全套 API"
@@ -3825,7 +3824,7 @@
         },
         "responses": {
           "200": {
-            "description": "成功，响应保持上游原始字段格式。",
+            "description": "成功返回更新后的素材组信息。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3852,7 +3851,7 @@
             }
           },
           "400": {
-            "description": "请求参数错误或上游拒绝请求。",
+            "description": "请求参数错误或请求未被接受。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3883,7 +3882,7 @@
       "post": {
         "summary": "创建素材资产",
         "deprecated": false,
-        "description": "在指定的素材组下创建或注册一个新的文件资产（支持图片、视频、音频）。素材上传后的初始状态为 Processing，系统会同步其状态直至 Active。\n\n供应商原始 Endpoint 为 POST /v1/seedance/oversea/ep/CreateAsset；本平台对外固定省略 /ep/ 路径段。",
+        "description": "在指定的素材组下创建或注册一个新的文件资产（支持图片、视频、音频）。素材上传后的初始状态为 Processing，系统会同步其状态直至 Active。",
         "operationId": "seedanceOverseasCreateAsset",
         "tags": [
           "Seedance 海外全套 API"
@@ -3908,7 +3907,7 @@
         },
         "responses": {
           "200": {
-            "description": "成功，响应保持上游原始字段格式。",
+            "description": "成功返回创建的素材信息。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3938,7 +3937,7 @@
             }
           },
           "400": {
-            "description": "请求参数错误或上游拒绝请求。",
+            "description": "请求参数错误或请求未被接受。",
             "content": {
               "application/json": {
                 "schema": {
@@ -3969,7 +3968,7 @@
       "post": {
         "summary": "列表查询素材资产",
         "deprecated": false,
-        "description": "分页查询您上传的素材文件列表，支持按名称、类型、状态进行过滤。\n\n供应商原始 Endpoint 为 POST /v1/seedance/oversea/ep/ListAssets；本平台对外固定省略 /ep/ 路径段。",
+        "description": "分页查询您上传的素材文件列表，支持按名称、类型、状态进行过滤。",
         "operationId": "seedanceOverseasListAssets",
         "tags": [
           "Seedance 海外全套 API"
@@ -3998,7 +3997,7 @@
         },
         "responses": {
           "200": {
-            "description": "成功，响应保持上游原始字段格式。",
+            "description": "成功返回素材列表。",
             "content": {
               "application/json": {
                 "schema": {
@@ -4032,7 +4031,7 @@
             }
           },
           "400": {
-            "description": "请求参数错误或上游拒绝请求。",
+            "description": "请求参数错误或请求未被接受。",
             "content": {
               "application/json": {
                 "schema": {
@@ -4063,7 +4062,7 @@
       "post": {
         "summary": "获取素材详情",
         "deprecated": false,
-        "description": "查询指定人脸、视频或音频素材资产的详细属性和同步状态。\n\n供应商原始 Endpoint 为 POST /v1/seedance/oversea/ep/GetAsset；本平台对外固定省略 /ep/ 路径段。",
+        "description": "查询指定人脸、视频或音频素材资产的详细属性和同步状态。",
         "operationId": "seedanceOverseasGetAsset",
         "tags": [
           "Seedance 海外全套 API"
@@ -4084,7 +4083,7 @@
         },
         "responses": {
           "200": {
-            "description": "成功，响应保持上游原始字段格式。",
+            "description": "成功返回素材详情。",
             "content": {
               "application/json": {
                 "schema": {
@@ -4114,7 +4113,7 @@
             }
           },
           "400": {
-            "description": "请求参数错误或上游拒绝请求。",
+            "description": "请求参数错误或请求未被接受。",
             "content": {
               "application/json": {
                 "schema": {
@@ -4145,7 +4144,7 @@
       "post": {
         "summary": "更新素材",
         "deprecated": false,
-        "description": "更新已有海外版素材的名称或描述信息。供应商文档声明该接口可用，但当前接入上游实测仍可能返回 HTTP 404 Invalid URL。\n\n供应商原始 Endpoint 为 POST /v1/seedance/oversea/ep/UpdateAsset；本平台对外固定省略 /ep/ 路径段。",
+        "description": "更新已有海外版素材的名称或描述信息。该接口在部分部署环境中可能暂不可用，请以接口实际响应为准。",
         "operationId": "seedanceOverseasUpdateAsset",
         "tags": [
           "Seedance 海外全套 API"
@@ -4168,7 +4167,7 @@
         },
         "responses": {
           "200": {
-            "description": "供应商文档声明的成功响应；当前上游尚未开放时不会返回此响应。",
+            "description": "成功返回更新后的素材信息。",
             "content": {
               "application/json": {
                 "schema": {
@@ -4198,7 +4197,7 @@
             }
           },
           "400": {
-            "description": "请求参数错误或上游拒绝请求。",
+            "description": "请求参数错误或请求未被接受。",
             "content": {
               "application/json": {
                 "schema": {
@@ -4218,7 +4217,7 @@
             }
           },
           "404": {
-            "description": "当前供应商实测返回：该上游 Action 尚未开放。",
+            "description": "接口在当前部署环境中不可用。",
             "content": {
               "application/json": {
                 "schema": {
@@ -4226,7 +4225,7 @@
                 },
                 "example": {
                   "error": {
-                    "message": "Invalid URL (POST /v1/seedance/oversea/ep/UpdateAsset)",
+                    "message": "The requested operation is unavailable",
                     "type": "invalid_request_error",
                     "param": "",
                     "code": ""
@@ -4247,7 +4246,7 @@
       "post": {
         "summary": "创建 Seedance 海外视频任务",
         "deprecated": false,
-        "description": "按照 XFusionAI「Seedance 海外版视频生成」格式创建任务。参数直接放在请求顶层；图像、视频和音频参考素材放在 content 中，并为每项填写 role。",
+        "description": "创建 Seedance 海外视频任务。参数直接放在请求顶层；图像、视频和音频参考素材放在 content 中，并为每项填写 role。",
         "operationId": "createSeedanceOverseasVideo",
         "tags": [
           "Seedance 海外全套 API"
@@ -4261,7 +4260,7 @@
                 "$ref": "#/components/schemas/SeedanceOverseasVideoGenerationRequest"
               },
               "example": {
-                "model": "dreamina-seedance-2-0-260128",
+                "model": "doubao-seedance-2-0-filter-off",
                 "prompt": "女孩睁开眼，温柔地看向镜头，镜头缓缓拉出",
                 "ratio": "16:9",
                 "resolution": "720p",
@@ -4353,7 +4352,7 @@
                 },
                 "example": {
                   "id": "task_gKc7nN6mHffnEUdj2aF5pvOdv7UOhC7R",
-                  "model": "doubao-seedance-2-0-260128",
+                  "model": "doubao-seedance-2-0-filter-off",
                   "status": "succeeded",
                   "content": {
                     "video_url": "https://example.com/seedance-result.mp4"
@@ -6535,11 +6534,11 @@
           },
           "seconds": {
             "type": "string",
-            "description": "响应中的视频时长字段（供应商支持时返回）。"
+            "description": "视频时长字段（返回时可用）。"
           },
           "size": {
             "type": "string",
-            "description": "响应中的视频尺寸字段（供应商支持时返回）。"
+            "description": "视频尺寸字段（返回时可用）。"
           },
           "remixed_from_video_id": {
             "type": "string",
@@ -6566,7 +6565,7 @@
       },
       "VideoTaskResponse": {
         "type": "object",
-        "description": "视频任务查询响应。外层 data.status 是网关任务状态；data.data.status 是上游原始状态。成功时结果 URL 同时出现在 data.result_url 和 data.data.content.video_url。",
+        "description": "视频任务查询响应。外层 data.status 是统一任务状态，data.data.status 是任务处理状态。成功时结果 URL 同时出现在 data.result_url 和 data.data.content.video_url。",
         "required": [
           "code",
           "message",
@@ -6674,7 +6673,7 @@
               "start_time": {
                 "type": "integer",
                 "format": "int64",
-                "description": "上游开始处理时间，Unix 秒。"
+                "description": "开始处理时间，Unix 秒。"
               },
               "finish_time": {
                 "type": "integer",
@@ -6694,21 +6693,16 @@
                     "type": "string",
                     "description": "任务输入摘要。"
                   },
-                  "upstream_model_name": {
-                    "type": "string",
-                    "description": "实际发送给上游的模型名称。",
-                    "example": "dreamina-seedance-2-0-ep"
-                  },
                   "origin_model_name": {
                     "type": "string",
-                    "description": "下游请求使用的模型名称。",
+                    "description": "创建任务时使用的模型名称。",
                     "example": "doubao-seedance-2-0-filter-off"
                   }
                 }
               },
               "data": {
                 "type": "object",
-                "description": "上游任务响应原始数据。",
+                "description": "任务处理详情。",
                 "properties": {
                   "base_resp": {
                     "type": "object",
@@ -6729,7 +6723,7 @@
                       "video_url": {
                         "type": "string",
                         "format": "uri",
-                        "description": "上游返回的视频 URL。",
+                        "description": "生成的视频 URL。",
                         "example": "https://example.com/seedance-result.mp4"
                       }
                     }
@@ -6763,13 +6757,13 @@
                   },
                   "id": {
                     "type": "string",
-                    "description": "上游任务 ID。",
+                    "description": "任务处理 ID。",
                     "example": "task_VgWsT4LsVTvvyouTHBNNPA9jdoaEBTtq"
                   },
                   "model": {
                     "type": "string",
-                    "description": "上游模型名称。",
-                    "example": "dreamina-seedance-2-0-ep"
+                    "description": "任务使用的模型名称。",
+                    "example": "doubao-seedance-2-0-filter-off"
                   },
                   "ratio": {
                     "type": "string",
@@ -6788,12 +6782,12 @@
                   },
                   "service_tier": {
                     "type": "string",
-                    "description": "上游服务等级。",
+                    "description": "任务服务等级。",
                     "example": "default"
                   },
                   "status": {
                     "type": "string",
-                    "description": "上游原始任务状态。",
+                    "description": "任务处理状态。",
                     "enum": [
                       "queued",
                       "running",
@@ -6808,7 +6802,7 @@
                   },
                   "usage": {
                     "type": "object",
-                    "description": "上游返回的本次任务用量。",
+                    "description": "本次任务用量。",
                     "properties": {
                       "completion_tokens": {
                         "type": "integer",
@@ -7703,7 +7697,8 @@
             "description": "Seedance 海外素材模型",
             "enum": [
               "doubao-seedance-2-0-filter-off",
-              "doubao-seedance-2-0-fast-filter-off"
+              "doubao-seedance-2-0-fast-filter-off",
+              "dreamina-seedance-2-0-mini-filter-off"
             ]
           },
           "url": {
@@ -7724,7 +7719,7 @@
           },
           "AssetType": {
             "type": "string",
-            "description": "素材类型。当前正式示例为 Image；Video/Audio 请以上游实际支持为准。",
+            "description": "素材类型。当前正式示例为 Image；Video/Audio 请以接口实际支持情况为准。",
             "enum": [
               "Image",
               "Video",
@@ -7736,14 +7731,14 @@
       },
       "SeedanceOverseasCreateAssetResponse": {
         "type": "object",
-        "description": "Seedance 海外素材库 CreateAsset 上游风格响应。",
+        "description": "Seedance 海外素材库 CreateAsset 响应。",
         "required": [
           "id"
         ],
         "properties": {
           "id": {
             "type": "string",
-            "description": "上游素材 ID",
+            "description": "素材 ID",
             "example": "asset-xxx"
           }
         },
@@ -7762,12 +7757,13 @@
             "description": "Seedance 海外素材模型",
             "enum": [
               "doubao-seedance-2-0-filter-off",
-              "doubao-seedance-2-0-fast-filter-off"
+              "doubao-seedance-2-0-fast-filter-off",
+              "dreamina-seedance-2-0-mini-filter-off"
             ]
           },
           "Id": {
             "type": "string",
-            "description": "上游素材 ID",
+            "description": "素材 ID",
             "example": "asset-xxx"
           }
         },
@@ -7779,11 +7775,11 @@
         "properties": {
           "Id": {
             "type": "string",
-            "description": "上游素材 ID"
+            "description": "素材 ID"
           },
           "id": {
             "type": "string",
-            "description": "上游素材 ID"
+            "description": "素材 ID"
           },
           "Name": {
             "type": "string",
@@ -7804,11 +7800,11 @@
           },
           "URL": {
             "type": "string",
-            "description": "上游返回的素材 URL"
+            "description": "素材 URL"
           },
           "url": {
             "type": "string",
-            "description": "上游返回的素材 URL"
+            "description": "素材 URL"
           },
           "Error": {
             "type": "string",
@@ -7904,7 +7900,7 @@
           "assetUrl": {
             "type": "string",
             "format": "uri",
-            "description": "上游可通过公网访问的素材 URL",
+            "description": "可通过公网访问的素材 URL",
             "example": "https://example.com/person.png"
           },
           "assetName": {
@@ -8043,7 +8039,7 @@
       },
       "CmccAICCAssetListBody": {
         "type": "object",
-        "description": "素材列表分页数据。不同上游版本可能返回 data/total 或 dataRows/totalSize。",
+        "description": "素材列表分页数据，响应可能使用 data/total 或 dataRows/totalSize。",
         "properties": {
           "data": {
             "type": "array",
@@ -8059,14 +8055,14 @@
           },
           "dataRows": {
             "type": "array",
-            "description": "部分上游版本使用的素材列表字段",
+            "description": "素材列表字段",
             "items": {
               "$ref": "#/components/schemas/CmccAICCAsset"
             }
           },
           "totalSize": {
             "type": "integer",
-            "description": "部分上游版本使用的素材总数字段",
+            "description": "素材总数字段",
             "example": 1
           },
           "pageNo": {
@@ -8162,7 +8158,7 @@
       },
       "SeedanceOverseasResponseMetadata": {
         "type": "object",
-        "description": "上游返回的请求追踪元数据。",
+        "description": "请求追踪元数据。",
         "required": [
           "RequestId",
           "Action",
@@ -8173,7 +8169,7 @@
         "properties": {
           "RequestId": {
             "type": "string",
-            "description": "上游请求 ID，用于排查问题。",
+            "description": "请求 ID，用于排查问题。",
             "example": "20260721031451418589296DinlJ4DD"
           },
           "Action": {
@@ -8183,12 +8179,12 @@
           },
           "Version": {
             "type": "string",
-            "description": "上游 API 版本。",
+            "description": "API 版本。",
             "example": "2024-01-01"
           },
           "Service": {
             "type": "string",
-            "description": "上游服务名称。",
+            "description": "服务名称。",
             "example": "ark"
           },
           "Region": {
@@ -8402,7 +8398,7 @@
       },
       "SeedanceOverseasCreateAssetRequestV2": {
         "type": "object",
-        "description": "在海外素材组中登记图片、视频或音频。字段名区分大小写，请使用 URL、GroupId、AssetType 和 Name。URL 必须能被上游公网访问。",
+        "description": "在海外素材组中登记图片、视频或音频。字段名区分大小写，请使用 URL、GroupId、AssetType 和 Name。URL 必须能够通过公网访问。",
         "required": [
           "GroupId",
           "URL",
@@ -8704,7 +8700,7 @@
       },
       "SeedanceOverseasVideoGenerationRequest": {
         "type": "object",
-        "description": "Seedance 海外版视频生成请求。所有参数均位于请求顶层，不使用 metadata 包装。供应商参数表使用 dreamina-...-ep 名称，而其请求示例使用 dreamina-...-260128；平台代理兼容这两组名称。",
+        "description": "Seedance 海外版视频生成请求。所有参数均位于请求顶层，不使用 metadata 包装。",
         "required": [
           "model",
           "prompt"
@@ -8712,14 +8708,13 @@
         "properties": {
           "model": {
             "type": "string",
-            "description": "模型名称。支持 dreamina-seedance-2-0-ep、dreamina-seedance-2-0-fast-ep；同时兼容供应商示例中的 dreamina-seedance-2-0-260128、dreamina-seedance-2-0-fast-260128。",
+            "description": "平台支持的 Seedance 海外视频模型名称。",
             "enum": [
-              "dreamina-seedance-2-0-ep",
-              "dreamina-seedance-2-0-fast-ep",
-              "dreamina-seedance-2-0-260128",
-              "dreamina-seedance-2-0-fast-260128"
+              "doubao-seedance-2-0-filter-off",
+              "doubao-seedance-2-0-fast-filter-off",
+              "dreamina-seedance-2-0-mini-filter-off"
             ],
-            "example": "dreamina-seedance-2-0-260128"
+            "example": "doubao-seedance-2-0-filter-off"
           },
           "prompt": {
             "type": "string",
@@ -8838,8 +8833,13 @@
           },
           "model": {
             "type": "string",
-            "description": "任务实际使用的 Seedance 模型。",
-            "example": "doubao-seedance-2-0-260128"
+            "description": "创建任务时使用的 Seedance 模型。",
+            "enum": [
+              "doubao-seedance-2-0-filter-off",
+              "doubao-seedance-2-0-fast-filter-off",
+              "dreamina-seedance-2-0-mini-filter-off"
+            ],
+            "example": "doubao-seedance-2-0-filter-off"
           },
           "status": {
             "type": "string",
