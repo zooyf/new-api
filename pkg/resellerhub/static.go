@@ -374,9 +374,23 @@ const embeddedIndexHTML = `<!doctype html>
       return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
     }
     function getCookie(name) { var m=document.cookie.match(new RegExp('(?:^|; )'+name.replace(/[.$?*|{}()[\]\\/+^]/g,'\\$&')+'=([^;]*)')); return m ? decodeURIComponent(m[1]) : ''; }
+    function getNewAPIUserId() {
+      try {
+        var uid=window.localStorage.getItem('uid');
+        if (uid) return uid;
+        var rawUser=window.localStorage.getItem('user');
+        if (rawUser) {
+          var user=JSON.parse(rawUser);
+          if (user && user.id) return String(user.id);
+        }
+      } catch (_) {}
+      return '';
+    }
     function requestHeaders(write, eventId) {
       var headers={'Accept':'application/json'};
       if (write) headers['Content-Type']='application/json';
+      var uid=getNewAPIUserId();
+      if (uid) headers['New-Api-User']=uid;
       var csrf=state.csrf || getCookie('csrf_token') || getCookie('csrf');
       if (csrf) { headers['X-CSRF-Token']=csrf; headers['X-CSRFToken']=csrf; }
       if (eventId) { headers['Idempotency-Key']=eventId; headers['X-Idempotency-Key']=eventId; }

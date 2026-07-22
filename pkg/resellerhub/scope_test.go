@@ -39,6 +39,8 @@ func TestStaticInterfaceDoesNotLoadExternalAssets(t *testing.T) {
 	assert.Contains(t, html, "finite_key_explanation")
 	assert.Contains(t, html, "unlimited_quota=false")
 	assert.Contains(t, html, "MaxUserTokens")
+	assert.Contains(t, html, "window.localStorage.getItem('uid')")
+	assert.Contains(t, html, "headers['New-Api-User']=uid")
 	assert.Contains(t, html, "每个虚拟客户最多 1 个 Active 或 Retiring Key")
 }
 
