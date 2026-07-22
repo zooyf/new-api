@@ -42,7 +42,12 @@ func TestStaticInterfaceDoesNotLoadExternalAssets(t *testing.T) {
 	assert.Contains(t, html, "window.localStorage.getItem('uid')")
 	assert.Contains(t, html, "headers['New-Api-User']=uid")
 	assert.Contains(t, html, "membership_required")
-	assert.Contains(t, html, "每个虚拟客户最多 1 个 Active 或 Retiring Key")
+	assert.Contains(t, html, "每个客户最多 1 个 Active 或 Retiring Key")
+	assert.Contains(t, html, "系统创建时自动生成")
+	assert.Contains(t, html, "外部客户编号（选填）")
+	assert.Contains(t, html, "首次配置流程")
+	assert.NotContains(t, html, "虚拟客户")
+	assert.NotContains(t, html, "Virtual customer")
 }
 
 func TestWriteLeaderMiddlewareVerifiesDatabaseLease(t *testing.T) {

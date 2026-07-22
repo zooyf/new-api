@@ -112,7 +112,7 @@ func (a *App) createReseller(c *gin.Context) {
 	if input.Status == "" {
 		input.Status = "active"
 	}
-	if input.Code == "" || len(input.Code) > 64 || input.Name == "" || len(input.Name) > 128 || !validResellerStatus(input.Status) {
+	if len(input.Code) > 64 || input.Name == "" || len(input.Name) > 128 || !validResellerStatus(input.Status) {
 		respondError(c, http.StatusBadRequest, "invalid reseller fields")
 		return
 	}

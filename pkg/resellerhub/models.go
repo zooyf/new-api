@@ -1,6 +1,8 @@
 package resellerhub
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -59,6 +61,20 @@ type Reseller struct {
 
 func (Reseller) TableName() string {
 	return "reseller_hub_resellers"
+}
+
+// BeforeCreate assigns a stable public identifier when the caller does not
+// provide one. Existing API clients may still supply their own reseller code.
+func (reseller *Reseller) BeforeCreate(_ *gorm.DB) error {
+	if strings.TrimSpace(reseller.Code) != "" {
+		return nil
+	}
+	identifier, err := uuid.NewV7()
+	if err != nil {
+		return err
+	}
+	reseller.Code = "res_" + strings.ReplaceAll(identifier.String(), "-", "")
+	return nil
 }
 
 type Membership struct {
