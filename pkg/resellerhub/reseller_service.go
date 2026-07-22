@@ -401,8 +401,8 @@ func (a *App) referenceData(c *gin.Context) {
 			"max_user_tokens":                operation_setting.GetMaxUserTokens(),
 			"max_active_tokens_per_customer": 1,
 			"unlimited_quota_allowed":        false,
-			"min_discount_bps":                a.config.MinDiscountBPS,
-			"max_discount_bps":                a.config.MaxDiscountBPS,
+			"min_discount_bps":               a.config.MinDiscountBPS,
+			"max_discount_bps":               a.config.MaxDiscountBPS,
 		},
 	})
 }
