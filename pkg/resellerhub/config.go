@@ -9,6 +9,11 @@ import (
 	"github.com/QuantumNous/new-api/common"
 )
 
+const (
+	defaultMinDiscountBPS = 100
+	defaultMaxDiscountBPS = 50000
+)
+
 type Config struct {
 	Port                     string
 	BasePath                 string
@@ -51,8 +56,8 @@ func LoadConfig() Config {
 		LeaderLeaseDuration:      seconds("RESELLER_HUB_LEADER_LEASE_SECONDS", 30),
 		InstanceID:               instanceID,
 		AutoMigrate:              envBool("RESELLER_HUB_AUTO_MIGRATE", false),
-		MinDiscountBPS:           envInt("RESELLER_HUB_MIN_DISCOUNT_BPS", 5000),
-		MaxDiscountBPS:           envInt("RESELLER_HUB_MAX_DISCOUNT_BPS", 10000),
+		MinDiscountBPS:           envInt("RESELLER_HUB_MIN_DISCOUNT_BPS", defaultMinDiscountBPS),
+		MaxDiscountBPS:           envInt("RESELLER_HUB_MAX_DISCOUNT_BPS", defaultMaxDiscountBPS),
 		RedisEventMarkerTTL:      seconds("RESELLER_HUB_REDIS_EVENT_TTL_SECONDS", max(common.RedisKeyCacheSeconds()*3, 86400)),
 		CarrierLowQuota:          envInt("RESELLER_HUB_CARRIER_LOW_QUOTA", 0),
 		KeyQPSAlertThreshold:     envInt("RESELLER_HUB_KEY_QPS_ALERT_THRESHOLD", 0),

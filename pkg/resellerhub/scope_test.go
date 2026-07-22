@@ -46,6 +46,11 @@ func TestStaticInterfaceDoesNotLoadExternalAssets(t *testing.T) {
 	assert.Contains(t, html, "系统创建时自动生成")
 	assert.Contains(t, html, "外部客户编号（选填）")
 	assert.Contains(t, html, "首次配置流程")
+	assert.Contains(t, html, "计费比例（%）")
+	assert.Contains(t, html, "minDiscountPercent()")
+	assert.Contains(t, html, "maxDiscountPercent()")
+	assert.NotContains(t, html, "折扣基点")
+	assert.NotContains(t, html, "10000 = 原价")
 	assert.NotContains(t, html, "虚拟客户")
 	assert.NotContains(t, html, "Virtual customer")
 }

@@ -35,6 +35,8 @@ param(
     [ValidateRange(1, 86400)][int]$ConsistencyGraceSeconds = 180,
     [ValidateRange(0, 2147483647)][int]$CarrierLowQuota = 0,
     [ValidateRange(0, 1000000)][int]$KeyQPSAlertThreshold = 0,
+    [ValidateRange(1, 1000000)][int]$MinDiscountBPS = 100,
+    [ValidateRange(1, 1000000)][int]$MaxDiscountBPS = 50000,
     [ValidateRange(1, 3600)][int]$MigrationTimeoutSeconds = 120,
     [ValidateRange(1, 300)][int]$MigrationLockTimeoutSeconds = 10,
     [ValidateRange(1, 3600)][int]$HealthTimeoutSeconds = 120,
@@ -140,6 +142,9 @@ if ($PreflightOnly -and $Rollback) {
 }
 if ($RollbackBackupName -and -not $Rollback) {
     throw "-RollbackBackupName requires -Rollback."
+}
+if ($MinDiscountBPS -gt $MaxDiscountBPS) {
+    throw "-MinDiscountBPS cannot exceed -MaxDiscountBPS."
 }
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -254,6 +259,8 @@ reconcile_interval="$ReconcileIntervalSeconds"
 consistency_grace="$ConsistencyGraceSeconds"
 carrier_low_quota="$CarrierLowQuota"
 key_qps_alert_threshold="$KeyQPSAlertThreshold"
+min_discount_bps="$MinDiscountBPS"
+max_discount_bps="$MaxDiscountBPS"
 migration_timeout="$MigrationTimeoutSeconds"
 migration_lock_timeout="$MigrationLockTimeoutSeconds"
 health_timeout="$HealthTimeoutSeconds"
@@ -506,6 +513,8 @@ umask 077
     printf 'RESELLER_HUB_AUTO_MIGRATE=false\n'
     printf 'RESELLER_HUB_CARRIER_LOW_QUOTA=%s\n' "`$carrier_low_quota"
     printf 'RESELLER_HUB_KEY_QPS_ALERT_THRESHOLD=%s\n' "`$key_qps_alert_threshold"
+    printf 'RESELLER_HUB_MIN_DISCOUNT_BPS=%s\n' "`$min_discount_bps"
+    printf 'RESELLER_HUB_MAX_DISCOUNT_BPS=%s\n' "`$max_discount_bps"
     printf 'RESELLER_HUB_REDIS_PREFIX=reseller_hub:\n'
 } > "`$hub_env_file"
 chmod 600 "`$hub_env_file"

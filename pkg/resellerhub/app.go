@@ -36,10 +36,10 @@ func New(db *gorm.DB, logDB *gorm.DB, config Config) *App {
 		config.AuthTimeout = 10 * time.Second
 	}
 	if config.MinDiscountBPS <= 0 {
-		config.MinDiscountBPS = 5000
+		config.MinDiscountBPS = defaultMinDiscountBPS
 	}
 	if config.MaxDiscountBPS <= 0 {
-		config.MaxDiscountBPS = 10000
+		config.MaxDiscountBPS = defaultMaxDiscountBPS
 	}
 	if config.LeaderLeaseDuration <= 0 {
 		config.LeaderLeaseDuration = 30 * time.Second
