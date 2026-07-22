@@ -33,8 +33,20 @@ func run() error {
 	if err := model.InitDB(); err != nil {
 		return fmt.Errorf("initialize main database: %w", err)
 	}
+	logDatabaseInitialized := false
 	defer func() {
-		if err := model.CloseDB(); err != nil {
+		if logDatabaseInitialized {
+			if err := model.CloseDB(); err != nil {
+				common.SysError("close Reseller Hub databases: " + err.Error())
+			}
+			return
+		}
+		sqlDB, err := model.DB.DB()
+		if err != nil {
+			common.SysError("close Reseller Hub database: " + err.Error())
+			return
+		}
+		if err := sqlDB.Close(); err != nil {
 			common.SysError("close Reseller Hub database: " + err.Error())
 		}
 	}()
@@ -70,6 +82,7 @@ func run() error {
 	if err := model.InitLogDB(); err != nil {
 		return fmt.Errorf("initialize log database: %w", err)
 	}
+	logDatabaseInitialized = true
 	if err := common.InitRedisClient(); err != nil {
 		return fmt.Errorf("initialize Redis: %w", err)
 	}
