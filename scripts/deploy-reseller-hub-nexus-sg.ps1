@@ -69,9 +69,16 @@ function Invoke-Remote {
 function Invoke-RemoteScript {
     param([Parameter(Mandatory = $true)][string]$Script)
 
-    ($Script -replace "`r`n", "`n") | & ssh $RemoteHost "bash -s"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Remote Reseller Hub operation failed on $RemoteHost."
+    $previousOutputEncoding = $OutputEncoding
+    try {
+        $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+        ($Script.TrimStart([char]0xFEFF) -replace "`r`n", "`n") | & ssh $RemoteHost "LC_ALL=C sed '1s/^\xEF\xBB\xBF//' | bash -s"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Remote Reseller Hub operation failed on $RemoteHost."
+        }
+    }
+    finally {
+        $OutputEncoding = $previousOutputEncoding
     }
 }
 
