@@ -540,7 +540,7 @@ EOF
 
 assert_active_unchanged
 echo "Running the isolated Reseller Hub schema migration..."
-timeout --foreground "`$migration_timeout"s docker compose -f "`$compose_file" -f "`$hub_override_file" run --rm --no-deps "`$hub_service" migrate
+timeout --foreground "`$migration_timeout"s docker compose -f "`$compose_file" -f "`$hub_override_file" run -T --rm --no-deps "`$hub_service" migrate
 assert_active_unchanged
 
 echo "Starting only the Reseller Hub service..."
