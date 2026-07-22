@@ -216,7 +216,7 @@ try {
 
         Write-Host "Packaging the current local checkout..."
         New-SourceArchive -SourceRoot $RepoRoot -ArchivePath $localSourceTar
-        Invoke-Remote "mkdir -p '$RemoteDir/releases' '$RemoteDir/builds' '$RemoteDir/backups'"
+        Invoke-Remote "mkdir -p '$RemoteDir/releases' '$RemoteDir/builds' '$RemoteDir/reseller-hub-backups'"
         Write-Host "Uploading the source archive..."
         Invoke-External -FilePath scp -Arguments @(
             "-C",
@@ -261,6 +261,7 @@ nginx_update_enabled="$nginxUpdateEnabled"
 rollback_backup_name="$RollbackBackupName"
 hub_override_file="`$remote_dir/docker-compose.reseller-hub.override.yml"
 hub_env_file="`$remote_dir/reseller-hub.env"
+hub_backup_root="`$remote_dir/reseller-hub-backups"
 
 cd "`$remote_dir"
 
@@ -401,12 +402,12 @@ capture_backup() {
 
 if [ "`$mode" = "rollback" ]; then
     if [ -n "`$rollback_backup_name" ]; then
-        rollback_dir="`$remote_dir/backups/`$rollback_backup_name"
+        rollback_dir="`$hub_backup_root/`$rollback_backup_name"
     else
-        rollback_dir="`$(find "`$remote_dir/backups" -mindepth 1 -maxdepth 1 -type d -name 'reseller-hub-*' ! -name 'reseller-hub-rollback-guard-*' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)"
+        rollback_dir="`$(find "`$hub_backup_root" -mindepth 1 -maxdepth 1 -type d -name 'reseller-hub-*' ! -name 'reseller-hub-rollback-guard-*' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)"
     fi
     case "`$rollback_dir" in
-        "`$remote_dir"/backups/reseller-hub-*) ;;
+        "`$hub_backup_root"/reseller-hub-*) ;;
         *) echo "Invalid or missing Reseller Hub backup directory." >&2; exit 1 ;;
     esac
     if [ ! -d "`$rollback_dir" ] || { [ "`$nginx_update_enabled" = "1" ] && [ ! -f "`$rollback_dir/nginx-site.conf" ]; }; then
@@ -414,7 +415,7 @@ if [ "`$mode" = "rollback" ]; then
         exit 1
     fi
 
-    guard_dir="`$remote_dir/backups/reseller-hub-rollback-guard-`$(date -u +%Y%m%dT%H%M%SZ)"
+    guard_dir="`$hub_backup_root/reseller-hub-rollback-guard-`$(date -u +%Y%m%dT%H%M%SZ)"
     capture_backup "`$guard_dir"
     restore_files_from_backup "`$rollback_dir"
     apply_restored_sidecar "`$rollback_dir"
@@ -434,7 +435,7 @@ if [ "`$mode" = "rollback" ]; then
     exit 0
 fi
 
-backup_dir="`$remote_dir/backups/reseller-hub-`$(date -u +%Y%m%dT%H%M%SZ)-`$safe_tag"
+backup_dir="`$hub_backup_root/reseller-hub-`$(date -u +%Y%m%dT%H%M%SZ)-`$safe_tag"
 capture_backup "`$backup_dir"
 rollback_ready=1
 
