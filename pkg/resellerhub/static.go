@@ -291,7 +291,7 @@ const embeddedIndexHTML = `<!doctype html>
         audit_title: '审计日志', audit_desc: '追踪代理商、成员、客户、折扣、Key 和额度操作。', action: '动作', target: '目标', detail: '详情', ip: 'IP 地址',
         funding: '增加承载额度', funding_title: '增加代理商共享承载额度', funding_note: 'Root 第一期只允许增加 users.quota，不允许减少或覆盖。',
         confirm_danger: '确认高风险操作', confirm_disable_customer: '停用客户会阻止该客户 Key 的新调用；在途任务仍会继续结算。', confirm_disable_key: '停用 Key 会阻止新调用；在途任务仍会继续结算。', confirm_retire_key: '退役后 Key 不再接受新调用。存在未完成异步任务时将进入退役中状态。', confirm_remove_member: '移除后该账号将无法继续访问此代理商数据。', confirm_subtract: '请再次核对减少额度、客户和原因。此操作会写入不可覆盖的审计账本。', confirm_reverse: '冲正会创建一条方向相反、数量相同的新账本记录，并引用原事件；不会删除或覆盖历史。',
-        currency_config: '币种配置', quota_per_unit: '每单位 quota', exchange_rate: '有效汇率', discount: '折扣', page_unavailable: '当前身份无权访问此页面。', login_expired: '登录已失效，请返回主系统重新登录。'
+        currency_config: '币种配置', quota_per_unit: '每单位 quota', exchange_rate: '有效汇率', discount: '折扣', page_unavailable: '当前身份无权访问此页面。', login_expired: '登录已失效，请返回主系统重新登录。', membership_required: '主系统登录有效，但该账号尚未被授权为代理商成员。请让超级管理员在“成员”页面绑定该账号。', reseller_inactive: '该账号所属的代理商已停用，请联系超级管理员。'
       },
       en: {
         role_root: 'Platform super administrator', role_reseller: 'Reseller workspace', role_viewer: 'Reseller read-only member',
@@ -313,7 +313,7 @@ const embeddedIndexHTML = `<!doctype html>
         audit_title: 'Audit log', audit_desc: 'Trace reseller, member, customer, discount, key, and quota operations.', action: 'Action', target: 'Target', detail: 'Details', ip: 'IP address',
         funding: 'Add carrier quota', funding_title: 'Add shared carrier quota', funding_note: 'Phase one allows Root to add users.quota only. Subtract and override are unavailable.',
         confirm_danger: 'Confirm high-risk action', confirm_disable_customer: 'Suspending this customer blocks new key calls. In-flight tasks continue to settle.', confirm_disable_key: 'Disabling this key blocks new calls. In-flight tasks continue to settle.', confirm_retire_key: 'A retired key accepts no new calls. It remains retiring while async tasks are unfinished.', confirm_remove_member: 'This account will lose access to the reseller data.', confirm_subtract: 'Verify the customer, amount, and reason. This action is recorded in an immutable adjustment ledger.', confirm_reverse: 'Reversal creates an opposite adjustment for the same amount and references the original event. History is never deleted or overwritten.',
-        currency_config: 'Currency configuration', quota_per_unit: 'Quota per unit', exchange_rate: 'Effective rate', discount: 'Discount', page_unavailable: 'Your current role cannot access this page.', login_expired: 'Your session expired. Sign in through the main system again.'
+        currency_config: 'Currency configuration', quota_per_unit: 'Quota per unit', exchange_rate: 'Effective rate', discount: 'Discount', page_unavailable: 'Your current role cannot access this page.', login_expired: 'Your session expired. Sign in through the main system again.', membership_required: 'Your main-system session is valid, but this account has no active reseller membership. Ask a super administrator to bind it on the Members page.', reseller_inactive: 'The reseller assigned to this account is inactive. Contact a super administrator.'
       }
     };
 
@@ -402,6 +402,9 @@ const embeddedIndexHTML = `<!doctype html>
       var text=await response.text(), payload=null;
       if (text) { try { payload=JSON.parse(text); } catch (_) { payload={message:text}; } }
       if (response.status===401) throw new Error(t('login_expired'));
+      if (response.status===403 && (path===API+'/me'||path===API+'/auth/me')) {
+        throw new Error(pick(payload,['message'],'')==='reseller is not active'?t('reseller_inactive'):t('membership_required'));
+      }
       if (!response.ok || (payload && payload.success===false)) throw new Error(pick(payload,['message','error'],response.status+' '+response.statusText));
       return payload && Object.prototype.hasOwnProperty.call(payload,'data') ? payload.data : (payload||{});
     }

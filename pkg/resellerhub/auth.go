@@ -23,6 +23,11 @@ const (
 	membershipStatusDisabled = "disabled"
 )
 
+var (
+	errMembershipRequired = errors.New("active Reseller Hub membership required")
+	errResellerInactive   = errors.New("reseller is not active")
+)
+
 type Identity struct {
 	NewAPIUserID int    `json:"new_api_user_id"`
 	Username     string `json:"username"`
@@ -49,7 +54,11 @@ func (a *App) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		identity, err := a.authenticate(c.Request)
 		if err != nil {
-			respondError(c, http.StatusUnauthorized, err.Error())
+			status := http.StatusUnauthorized
+			if errors.Is(err, errMembershipRequired) || errors.Is(err, errResellerInactive) {
+				status = http.StatusForbidden
+			}
+			respondError(c, status, err.Error())
 			return
 		}
 		c.Set("reseller_hub_identity", identity)
@@ -74,13 +83,13 @@ func (a *App) authenticate(r *http.Request) (*Identity, error) {
 	err = a.db.Where("new_api_user_id = ? AND status = ?", identity.NewAPIUserID, membershipStatusActive).First(&membership).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("account is not authorized for Reseller Hub")
+			return nil, errMembershipRequired
 		}
 		return nil, err
 	}
 	var reseller Reseller
 	if err = a.db.Where("id = ? AND status = ?", membership.ResellerID, "active").First(&reseller).Error; err != nil {
-		return nil, errors.New("reseller is not active")
+		return nil, errResellerInactive
 	}
 	identity.HubRole = membership.Role
 	identity.ResellerID = membership.ResellerID

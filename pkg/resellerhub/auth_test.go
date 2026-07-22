@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +46,16 @@ func TestAuthenticateUsesGatewayIdentityAndSidecarMembership(t *testing.T) {
 	currentUserID = 8
 	_, err = app.authenticate(req)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not authorized")
+	assert.ErrorIs(t, err, errMembershipRequired)
+
+	router := http.NewServeMux()
+	ginRouter := gin.New()
+	ginRouter.GET("/reseller/api/me", app.authMiddleware(), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	router.Handle("/", ginRouter)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/reseller/api/me", nil))
+	assert.Equal(t, http.StatusForbidden, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), errMembershipRequired.Error())
 
 	currentUserID = 100
 	identity, err = app.authenticate(req)
