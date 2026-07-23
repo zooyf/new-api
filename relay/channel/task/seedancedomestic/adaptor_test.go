@@ -440,6 +440,7 @@ func TestResolveTaskBillingUsesPrivateBillAPIAndFrozenPrice(t *testing.T) {
 func TestQuotaFromDomesticUsageSaturatesOversizedProviderTokens(t *testing.T) {
 	quota, clamp, err := quotaFromDomesticUsage(int64(^uint64(0)>>1), &model.TaskProviderBillingSnapshot{
 		Provider:                  providerName,
+		Currency:                  "CNY",
 		UnitPricePerMillionTokens: "51",
 		CNYPerUSD:                 "7.3",
 		GroupRatio:                1,

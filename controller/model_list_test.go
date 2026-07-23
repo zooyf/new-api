@@ -376,9 +376,10 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-unpriced-model")
 }
 
-func TestListModelsTokenLimitIncludesOnlyProviderBilledSeedanceChannel(t *testing.T) {
+func TestListModelsTokenLimitUsesModelScopedProviderBilling(t *testing.T) {
 	withSelfUseModeDisabled(t)
 	const seedanceModel = "doubao-seedance-2-0-260128"
+	const filterOffModel = "doubao-seedance-2-0-filter-off"
 
 	savedModelPrices := ratio_setting.ModelPrice2JSONString()
 	savedModelRatios := ratio_setting.ModelRatio2JSONString()
@@ -388,11 +389,13 @@ func TestListModelsTokenLimitIncludesOnlyProviderBilledSeedanceChannel(t *testin
 	})
 	modelPrices := ratio_setting.GetModelPriceCopy()
 	delete(modelPrices, seedanceModel)
+	delete(modelPrices, filterOffModel)
 	modelPricesJSON, err := common.Marshal(modelPrices)
 	require.NoError(t, err)
 	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(modelPricesJSON)))
 	modelRatios := ratio_setting.GetModelRatioCopy()
 	delete(modelRatios, seedanceModel)
+	delete(modelRatios, filterOffModel)
 	modelRatiosJSON, err := common.Marshal(modelRatios)
 	require.NoError(t, err)
 	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(modelRatiosJSON)))
@@ -401,6 +404,10 @@ func TestListModelsTokenLimitIncludesOnlyProviderBilledSeedanceChannel(t *testin
 	require.False(t, hasPrice)
 	_, hasRatio, _ := ratio_setting.GetModelRatio(seedanceModel)
 	require.False(t, hasRatio)
+	_, hasFilterOffPrice := ratio_setting.GetModelPrice(filterOffModel, false)
+	require.False(t, hasFilterOffPrice)
+	_, hasFilterOffRatio, _ := ratio_setting.GetModelRatio(filterOffModel)
+	require.False(t, hasFilterOffRatio)
 
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&[]model.Channel{
@@ -440,12 +447,22 @@ func TestListModelsTokenLimitIncludesOnlyProviderBilledSeedanceChannel(t *testin
 			Group:  "mixed",
 			Models: seedanceModel,
 		},
+		{
+			Id:     805,
+			Type:   constant.ChannelTypeDoubaoVideo,
+			Key:    "filter-off-key",
+			Status: common.ChannelStatusEnabled,
+			Name:   "filter-off-doubao-video",
+			Group:  "filter-off",
+			Models: filterOffModel,
+		},
 	}).Error)
 	require.NoError(t, db.Create(&[]model.Ability{
 		{Group: "domestic", Model: seedanceModel, ChannelId: 801, Enabled: true},
 		{Group: "doubao", Model: seedanceModel, ChannelId: 802, Enabled: true},
 		{Group: "mixed", Model: seedanceModel, ChannelId: 803, Enabled: true},
 		{Group: "mixed", Model: seedanceModel, ChannelId: 804, Enabled: true},
+		{Group: "filter-off", Model: filterOffModel, ChannelId: 805, Enabled: true},
 	}).Error)
 
 	listForGroup := func(group string) map[string]struct{} {
@@ -456,6 +473,7 @@ func TestListModelsTokenLimitIncludesOnlyProviderBilledSeedanceChannel(t *testin
 		common.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, true)
 		common.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, map[string]bool{
 			seedanceModel:             true,
+			filterOffModel:            true,
 			"zz-token-unpriced-model": true,
 		})
 
@@ -468,10 +486,13 @@ func TestListModelsTokenLimitIncludesOnlyProviderBilledSeedanceChannel(t *testin
 	require.NotContains(t, domesticModels, "zz-token-unpriced-model")
 
 	doubaoModels := listForGroup("doubao")
-	require.NotContains(t, doubaoModels, seedanceModel)
+	require.Contains(t, doubaoModels, seedanceModel)
 
 	mixedModels := listForGroup("mixed")
-	require.NotContains(t, mixedModels, seedanceModel)
+	require.Contains(t, mixedModels, seedanceModel)
+
+	filterOffModels := listForGroup("filter-off")
+	require.NotContains(t, filterOffModels, filterOffModel)
 }
 
 func TestCheckUpdatePasswordRequiresCurrentPassword(t *testing.T) {

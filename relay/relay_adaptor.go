@@ -170,13 +170,13 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 	return nil
 }
 
-// TaskAdaptorUsesProviderBilling reports whether a channel's task adaptor
-// supplies its complete price instead of relying on model ratio/price settings.
-func TaskAdaptorUsesProviderBilling(channelType int) bool {
+// TaskAdaptorUsesProviderBilling reports whether a channel and model pair's task
+// adaptor supplies its complete price instead of relying on model ratio/price settings.
+func TaskAdaptorUsesProviderBilling(channelType int, modelName string) bool {
 	adaptor := GetTaskAdaptor(constant.TaskPlatform(strconv.Itoa(channelType)))
 	if adaptor == nil {
 		return false
 	}
-	_, ok := adaptor.(channel.TaskBillingEstimator)
-	return ok
+	estimator, ok := adaptor.(channel.TaskBillingEstimator)
+	return ok && estimator.SupportsTaskBilling(channelType, modelName)
 }

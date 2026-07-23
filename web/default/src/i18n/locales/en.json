@@ -5213,6 +5213,21 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Seedance CNY Pricing": "Seedance CNY Pricing",
+    "CNY / 1M tokens": "CNY / 1M tokens",
+    "Save Seedance prices": "Save Seedance prices",
+    "Seedance 2.0 Standard": "Seedance 2.0 Standard",
+    "Seedance 2.0 Fast": "Seedance 2.0 Fast",
+    "Without input video": "Without input video",
+    "With input video": "With input video",
+    "Billing behavior": "Billing behavior",
+    "Set the customer base price per million video tokens for each model and resolution.": "Set the customer base price per million video tokens for each model and resolution.",
+    "Group ratios are applied after these base prices. Tasks already submitted keep the price snapshot captured at submission.": "Group ratios are applied after these base prices. Tasks already submitted keep the price snapshot captured at submission.",
+    "Each price must be greater than 0.": "Each price must be greater than 0.",
+    "Each price must be a finite number.": "Each price must be a finite number.",
+    "Each price must not exceed 1,000,000.": "Each price must not exceed 1,000,000.",
+    "All supported resolutions": "All supported resolutions",
+    "Resolution": "Resolution"
   }
 }

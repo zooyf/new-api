@@ -5213,6 +5213,21 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Seedance CNY Pricing": "Seedance 人民币定价",
+    "CNY / 1M tokens": "人民币 / 百万 Token",
+    "Save Seedance prices": "保存 Seedance 价格",
+    "Seedance 2.0 Standard": "Seedance 2.0 标准版",
+    "Seedance 2.0 Fast": "Seedance 2.0 极速版",
+    "Without input video": "无输入视频",
+    "With input video": "有输入视频",
+    "Billing behavior": "计费规则",
+    "Set the customer base price per million video tokens for each model and resolution.": "设置每个模型及分辨率下每百万视频 Token 的客户基础价格。",
+    "Group ratios are applied after these base prices. Tasks already submitted keep the price snapshot captured at submission.": "在这些基础价格上还会应用分组倍率。已提交的任务继续使用提交时记录的价格快照。",
+    "Each price must be greater than 0.": "每项价格必须大于 0。",
+    "Each price must be a finite number.": "每项价格必须是有限数值。",
+    "Each price must not exceed 1,000,000.": "每项价格不得超过 1,000,000。",
+    "All supported resolutions": "全部支持的分辨率",
+    "Resolution": "分辨率"
   }
 }

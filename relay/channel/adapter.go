@@ -95,5 +95,6 @@ type TaskBillingEstimate struct {
 }
 
 type TaskBillingEstimator interface {
+	SupportsTaskBilling(channelType int, modelName string) bool
 	EstimateTaskBilling(c *gin.Context, info *relaycommon.RelayInfo) (*TaskBillingEstimate, *dto.TaskError)
 }

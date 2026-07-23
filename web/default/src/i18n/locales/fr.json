@@ -5213,6 +5213,21 @@
     "Zero retention": "Aucune rétention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Seedance CNY Pricing": "Tarification Seedance en CNY",
+    "CNY / 1M tokens": "CNY / 1 M de jetons",
+    "Save Seedance prices": "Enregistrer les tarifs Seedance",
+    "Seedance 2.0 Standard": "Seedance 2.0 Standard",
+    "Seedance 2.0 Fast": "Seedance 2.0 Rapide",
+    "Without input video": "Sans vidéo d’entrée",
+    "With input video": "Avec vidéo d’entrée",
+    "Billing behavior": "Règles de facturation",
+    "Set the customer base price per million video tokens for each model and resolution.": "Définissez le tarif de base facturé au client par million de jetons vidéo pour chaque modèle et chaque résolution.",
+    "Group ratios are applied after these base prices. Tasks already submitted keep the price snapshot captured at submission.": "Les coefficients de groupe s’appliquent après ces tarifs de base. Les tâches déjà soumises conservent l’instantané tarifaire enregistré lors de leur soumission.",
+    "Each price must be greater than 0.": "Chaque tarif doit être supérieur à 0.",
+    "Each price must be a finite number.": "Chaque tarif doit être un nombre fini.",
+    "Each price must not exceed 1,000,000.": "Chaque tarif ne doit pas dépasser 1 000 000.",
+    "All supported resolutions": "Toutes les résolutions prises en charge",
+    "Resolution": "Résolution"
   }
 }

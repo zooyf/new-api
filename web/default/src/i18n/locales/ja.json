@@ -5213,6 +5213,21 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Seedance CNY Pricing": "Seedance 人民元料金",
+    "CNY / 1M tokens": "人民元 / 100万トークン",
+    "Save Seedance prices": "Seedance 料金を保存",
+    "Seedance 2.0 Standard": "Seedance 2.0 標準",
+    "Seedance 2.0 Fast": "Seedance 2.0 高速",
+    "Without input video": "入力動画なし",
+    "With input video": "入力動画あり",
+    "Billing behavior": "課金ルール",
+    "Set the customer base price per million video tokens for each model and resolution.": "モデルと解像度ごとに、動画トークン100万件あたりの顧客向け基本料金を設定します。",
+    "Group ratios are applied after these base prices. Tasks already submitted keep the price snapshot captured at submission.": "これらの基本料金にグループ倍率が適用されます。送信済みのタスクには、送信時に記録された料金スナップショットが引き続き適用されます。",
+    "Each price must be greater than 0.": "各料金は0より大きい値にしてください。",
+    "Each price must be a finite number.": "各料金は有限の数値にしてください。",
+    "Each price must not exceed 1,000,000.": "各料金は1,000,000以下にしてください。",
+    "All supported resolutions": "対応するすべての解像度",
+    "Resolution": "解像度"
   }
 }

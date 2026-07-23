@@ -38,6 +38,10 @@ type TaskAdaptor struct {
 	proxy   string
 }
 
+func (a *TaskAdaptor) SupportsTaskBilling(channelType int, modelName string) bool {
+	return channelType == constant.ChannelTypeSeedanceDomestic && modelName == defaultModel
+}
+
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.apiKey = strings.TrimSpace(info.ApiKey)
 	a.baseURL = info.ChannelBaseUrl

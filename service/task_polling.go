@@ -34,6 +34,10 @@ type TaskPollingAdaptor interface {
 	AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int
 }
 
+type checkedTaskBillingAdjuster interface {
+	AdjustBillingOnCompleteChecked(task *model.Task, taskResult *relaycommon.TaskInfo) (quota int, clamp *common.QuotaClamp, handled bool, err error)
+}
+
 type taskEndpointFetcher interface {
 	FetchTaskAt(baseURL string, key string, fetchPath string, body map[string]any, proxy string) (*http.Response, error)
 }
@@ -683,6 +687,19 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
 		return
+	}
+	if adjuster, ok := adaptor.(checkedTaskBillingAdjuster); ok {
+		actualQuota, clamp, handled, err := adjuster.AdjustBillingOnCompleteChecked(task, taskResult)
+		if err != nil {
+			logger.LogError(ctx, fmt.Sprintf("任务 %s adaptor 计费调整失败: %s", task.TaskID, err.Error()))
+			return
+		}
+		if handled {
+			if actualQuota > 0 {
+				RecalculateTaskQuota(ctx, task, actualQuota, "adaptor计费调整", clamp)
+			}
+			return
+		}
 	}
 	// 1. 优先让 adaptor 决定最终额度
 	if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {

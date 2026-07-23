@@ -239,7 +239,7 @@ func ListModels(c *gin.Context, modelType int) {
 			return
 		}
 		for _, ability := range abilities {
-			if relay.TaskAdaptorUsesProviderBilling(ability.ChannelType) {
+			if relay.TaskAdaptorUsesProviderBilling(ability.ChannelType, ability.Model) {
 				if _, hasNonProviderChannel := nonProviderBilledModels[ability.Model]; !hasNonProviderChannel {
 					providerBilledModels[ability.Model] = struct{}{}
 				}

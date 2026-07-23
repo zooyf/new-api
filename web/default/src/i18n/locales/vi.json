@@ -5213,6 +5213,21 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Seedance CNY Pricing": "Định giá Seedance bằng CNY",
+    "CNY / 1M tokens": "CNY / 1 triệu token",
+    "Save Seedance prices": "Lưu giá Seedance",
+    "Seedance 2.0 Standard": "Seedance 2.0 Tiêu chuẩn",
+    "Seedance 2.0 Fast": "Seedance 2.0 Nhanh",
+    "Without input video": "Không có video đầu vào",
+    "With input video": "Có video đầu vào",
+    "Billing behavior": "Quy tắc tính phí",
+    "Set the customer base price per million video tokens for each model and resolution.": "Đặt giá cơ bản tính cho khách hàng trên mỗi một triệu token video theo từng mô hình và độ phân giải.",
+    "Group ratios are applied after these base prices. Tasks already submitted keep the price snapshot captured at submission.": "Hệ số nhóm được áp dụng sau các mức giá cơ bản này. Những tác vụ đã gửi vẫn giữ bản chụp giá được ghi nhận tại thời điểm gửi.",
+    "Each price must be greater than 0.": "Mỗi mức giá phải lớn hơn 0.",
+    "Each price must be a finite number.": "Mỗi mức giá phải là một số hữu hạn.",
+    "Each price must not exceed 1,000,000.": "Mỗi mức giá không được vượt quá 1.000.000.",
+    "All supported resolutions": "Tất cả độ phân giải được hỗ trợ",
+    "Resolution": "Độ phân giải"
   }
 }

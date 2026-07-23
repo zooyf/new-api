@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	"github.com/shopspring/decimal"
 )
 
@@ -100,23 +101,5 @@ func quotaFromDomesticUsage(totalTokens int64, snapshot *model.TaskProviderBilli
 	if snapshot == nil || snapshot.Provider != providerName {
 		return 0, nil, fmt.Errorf("missing Seedance domestic billing snapshot")
 	}
-	unitPrice, err := decimal.NewFromString(snapshot.UnitPricePerMillionTokens)
-	if err != nil || !unitPrice.IsPositive() {
-		return 0, nil, fmt.Errorf("invalid frozen CNY unit price")
-	}
-	exchangeRate, err := decimal.NewFromString(snapshot.CNYPerUSD)
-	if err != nil || !exchangeRate.IsPositive() {
-		return 0, nil, fmt.Errorf("invalid frozen CNY/USD exchange rate")
-	}
-	if totalTokens <= 0 || snapshot.GroupRatio < 0 {
-		return 0, nil, fmt.Errorf("invalid billing multiplier")
-	}
-	quotaDecimal := decimal.NewFromInt(totalTokens).
-		Div(decimal.NewFromInt(1_000_000)).
-		Mul(unitPrice).
-		Div(exchangeRate).
-		Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
-		Mul(decimal.NewFromFloat(snapshot.GroupRatio))
-	quota, clamp := common.QuotaFromDecimalChecked(quotaDecimal)
-	return quota, clamp, nil
+	return taskcommon.QuotaFromCNYPerMillionTokens(totalTokens, snapshot)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	seedancepricing "github.com/QuantumNous/new-api/setting/seedance_video_pricing"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"gorm.io/gorm"
 )
@@ -606,6 +607,10 @@ func handleConfigUpdate(key, value string) bool {
 	} else if configName == "billing_setting" {
 		InvalidatePricingCache()
 		ratio_setting.InvalidateExposedDataCache()
+	} else if configName == "seedance_video_pricing" {
+		if err := seedancepricing.RebuildPriceIndex(); err != nil {
+			common.SysError("failed to rebuild Seedance video CNY price index: " + err.Error())
+		}
 	} else if configName == "theme" {
 		system_setting.UpdateAndSyncTheme()
 	}

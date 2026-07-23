@@ -77,6 +77,7 @@ import {
   getOptionValue,
 } from '@/features/system-settings/hooks/use-system-options'
 import { useUpdateOption } from '@/features/system-settings/hooks/use-update-option'
+import { DEFAULT_SEEDANCE_VIDEO_PRICES_CNY_JSON } from '@/features/system-settings/models/seedance-video-pricing'
 import { normalizeJsonString } from '@/features/system-settings/models/utils'
 import type { ModelSettings } from '@/features/system-settings/types'
 import { safeJsonParse } from '@/features/system-settings/utils/json-parser'
@@ -192,6 +193,8 @@ export function ModelMutateDrawer({
       'billing_setting.billing_mode': '{}',
       'billing_setting.billing_expr': '{}',
       'tool_price_setting.prices': '{}',
+      'seedance_video_pricing.prices_cny':
+        DEFAULT_SEEDANCE_VIDEO_PRICES_CNY_JSON,
       TopupGroupRatio: '',
       GroupRatio: '',
       UserUsableGroups: '',

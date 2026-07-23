@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -753,6 +754,10 @@ func TestNonTerminalUpdate_NoBilling(t *testing.T) {
 
 type mockAdaptor struct {
 	adjustReturn int
+	checkedQuota int
+	checkedClamp *common.QuotaClamp
+	checked      bool
+	checkedErr   error
 }
 
 func (m *mockAdaptor) Init(_ *relaycommon.RelayInfo) {}
@@ -762,6 +767,9 @@ func (m *mockAdaptor) FetchTask(string, string, map[string]any, string) (*http.R
 func (m *mockAdaptor) ParseTaskResult([]byte) (*relaycommon.TaskInfo, error) { return nil, nil }
 func (m *mockAdaptor) AdjustBillingOnComplete(_ *model.Task, _ *relaycommon.TaskInfo) int {
 	return m.adjustReturn
+}
+func (m *mockAdaptor) AdjustBillingOnCompleteChecked(_ *model.Task, _ *relaycommon.TaskInfo) (int, *common.QuotaClamp, bool, error) {
+	return m.checkedQuota, m.checkedClamp, m.checked, m.checkedErr
 }
 
 // ===========================================================================
@@ -851,4 +859,64 @@ func TestSettle_NonPerCallBilling_AppliesAdaptorAdjustment(t *testing.T) {
 	log := getLastLog(t)
 	require.NotNil(t, log)
 	assert.Equal(t, model.LogTypeRefund, log.Type)
+}
+
+func TestSettle_CheckedAdaptorPreservesQuotaClampAudit(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 33, 33, 33
+	const initQuota, preConsumed, actualQuota = 10_000, 5_000, 3_000
+	const tokenRemain = 8_000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-checked-adaptor", tokenRemain)
+	seedChannel(t, channelID)
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	clamp := &common.QuotaClamp{
+		Op:       "QuotaFromDecimal",
+		Kind:     common.QuotaClampOverflow,
+		Original: 3e10,
+		Clamped:  common.MaxQuota,
+	}
+	adaptor := &mockAdaptor{
+		checked:      true,
+		checkedQuota: actualQuota,
+		checkedClamp: clamp,
+	}
+
+	settleTaskBillingOnComplete(ctx, adaptor, task, &relaycommon.TaskInfo{Status: model.TaskStatusSuccess})
+
+	assert.Equal(t, actualQuota, task.Quota)
+	log := getLastLog(t)
+	require.NotNil(t, log)
+	assert.Contains(t, log.Other, `"quota_saturation"`)
+	assert.Contains(t, log.Other, `"QuotaFromDecimal"`)
+}
+
+func TestSettle_CheckedAdaptorErrorDoesNotFallBackToLiveRatios(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 34, 34, 34
+	const initQuota, preConsumed, tokenRemain = 10_000, 5_000, 8_000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-checked-error", tokenRemain)
+	seedChannel(t, channelID)
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	adaptor := &mockAdaptor{
+		checked:    true,
+		checkedErr: errors.New("invalid frozen price"),
+	}
+
+	settleTaskBillingOnComplete(ctx, adaptor, task, &relaycommon.TaskInfo{
+		Status:      model.TaskStatusSuccess,
+		TotalTokens: 1_000_000,
+	})
+
+	assert.Equal(t, preConsumed, task.Quota)
+	assert.Equal(t, initQuota, getUserQuota(t, userID))
+	assert.Equal(t, tokenRemain, getTokenRemainQuota(t, tokenID))
+	assert.Equal(t, int64(0), countLogs(t))
 }

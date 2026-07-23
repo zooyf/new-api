@@ -16,6 +16,7 @@ const (
 	TaskBillingReconciliationSettled    = "settled"
 	TaskBillingReconciliationNotNeeded  = "not_needed"
 	TaskBillingProviderSeedanceDomestic = "seedance_domestic"
+	TaskBillingProviderDoubaoVideoCNY   = "doubao_video_cny"
 )
 
 type TaskBillingReconciliation struct {
