@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Nexus Reach Seedance 2.0 API",
-    "version": "2026-07-19.2",
-    "description": "Seedance 2.0 国内视频生成与素材资产接口。本 OpenAPI 文件列出的 9 个 paths 构成 Seedance 国内客户契约；网关为其他供应商保留的通用 new-api 路由不属于本契约。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权。视频创建、状态查询、完整下载、Range 下载以及素材组/素材主流程已于 2026-07-18 通过公网 IP HTTPS 入口完成端到端验证；9 个 operation 中已有 8 个完成业务成功分支 E2E，`GetVisualValidateResult` 仅完成无效令牌负例，其成功分支必须由已授权本人在 120 秒内完成人工活体认证后补验。`ListSplitBillDetail` 仅供网关内部结算使用，不是对外 API。"
+    "version": "2026-07-23.1",
+    "description": "Nexus Reach 对外提供 Seedance 2.0 国内视频生成、素材资产以及移动视频素材库/真人认证接口。本 OpenAPI 文件共列出 15 个 paths：原有 9 个 Seedance 国内接口保持不变，另新增 6 个移动视频接口。所有公开请求统一通过 Nexus Reach API Gateway 访问，并使用 Nexus Reach API Key 鉴权；不要将上游供应商域名作为生产请求地址。原有视频创建、状态查询、完整下载、Range 下载以及素材组/素材主流程已于 2026-07-18 通过公网 IP HTTPS 入口完成端到端验证；原有 9 个 operation 中已有 8 个完成业务成功分支 E2E，`GetVisualValidateResult` 仅完成无效令牌负例，其成功分支必须由已授权本人在 120 秒内完成人工活体认证后补验。新增移动视频接口按独立渠道路由，响应结构以顶层 `body` 字段为准。`ListSplitBillDetail` 仅供网关内部结算使用，不是对外 API。"
   },
   "servers": [
     {
@@ -32,6 +32,14 @@
     {
       "name": "素材资产",
       "description": "在请求头中携带 `Authorization: Bearer sk-your-key`。CreateAsset 是异步接口，创建素材后需轮询 GetAsset；只有 Status 为 Active 的素材才能通过 `asset://<AssetId>` 用于视频生成。素材与真人认证接口的业务失败可能仍返回 HTTP 200，调用方必须同时检查 `state === 1`、`data` 非空且 `error === null`，不能只判断 HTTP 状态。素材必须拥有完整合法的使用权，不得包含未授权商标、标识或真实自然人肖像，不得侵犯第三方人格权或知识产权，并应符合适用法律法规。素材入库仅支持合规的虚拟或仿真人物资产；依法授权的真人素材应先完成真人认证流程。"
+    },
+    {
+      "name": "移动视频-素材库",
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`，并使用已开通移动视频渠道的 Nexus Reach API Key。该组接口由 Nexus Reach 网关转发到移动视频素材服务，成功响应的数据位于顶层 `body` 字段。创建素材组和上传素材会在上游产生资源；查询素材列表或单个素材时，请使用同一移动视频渠道返回的 groupId/assetId。"
+    },
+    {
+      "name": "移动视频-真人认证",
+      "description": "在请求头中携带 `Authorization: Bearer sk-your-key`，并使用已开通移动视频渠道的 Nexus Reach API Key。真人认证仅限依法获得授权的本人使用。创建会话后应立即打开返回的 h5Link 完成认证，并在有效期内使用 bytedToken 查询真人素材组；bytedToken 属于敏感的一次性凭证，不得写入公开日志或前端长期存储。"
     }
   ],
   "paths": {
@@ -775,6 +783,308 @@
           "502": { "$ref": "#/components/responses/UpstreamError" }
         }
       }
+    },
+    "/api/openapi-maas/exp/aicc/v2/asset-group/": {
+      "post": {
+        "tags": ["移动视频-素材库"],
+        "summary": "创建移动视频素材组",
+        "operationId": "createCmccAICCAssetGroup",
+        "description": "在移动视频素材库中创建素材组。成功后请保存 `body.groupId`，上传素材和查询素材列表时需要使用该 ID。该路径末尾包含 `/`。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AICCAssetGroupCreateRequest"
+              },
+              "example": {
+                "groupName": "默认素材组",
+                "description": "用于图生视频",
+                "groupType": "AIGC"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "素材组创建成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AICCAssetGroupCreateResponse"
+                },
+                "example": {
+                  "body": {
+                    "groupId": "cmcc-group-id",
+                    "groupName": "默认素材组",
+                    "description": "用于图生视频",
+                    "groupType": "AIGC"
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AICCNotFound" },
+          "405": { "$ref": "#/components/responses/MethodNotAllowed" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/asset/": {
+      "post": {
+        "tags": ["移动视频-素材库"],
+        "summary": "上传移动视频素材",
+        "operationId": "createCmccAICCAsset",
+        "description": "通过可公开访问的素材 URL 将素材登记到指定移动视频素材组。成功响应的 `body` 是素材 ID 字符串，后续可用于单素材查询。该路径末尾包含 `/`。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AICCAssetCreateRequest"
+              },
+              "example": {
+                "groupId": "cmcc-group-id",
+                "assetUrl": "https://example.com/person.png",
+                "assetName": "person-reference",
+                "assetType": "Image"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "素材登记成功，`body` 为素材 ID。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AICCAssetCreateResponse"
+                },
+                "example": {
+                  "body": "cmcc-asset-id"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AICCNotFound" },
+          "405": { "$ref": "#/components/responses/MethodNotAllowed" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/asset/query": {
+      "post": {
+        "tags": ["移动视频-素材库"],
+        "summary": "查询移动视频素材列表",
+        "operationId": "queryCmccAICCAssets",
+        "description": "按素材组分页查询移动视频素材。`body.data` 为当前页素材数组，`body.total` 为符合条件的素材总数。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AICCAssetQueryRequest"
+              },
+              "example": {
+                "groupIds": ["cmcc-group-id"],
+                "groupType": "AIGC",
+                "assetType": "Image",
+                "statuses": ["ACTIVE"],
+                "pageNo": 1,
+                "pageSize": 20
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "素材列表查询成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AICCAssetQueryResponse"
+                },
+                "example": {
+                  "body": {
+                    "data": [
+                      {
+                        "assetId": "cmcc-asset-id",
+                        "groupId": "cmcc-group-id",
+                        "assetName": "person-reference",
+                        "assetType": "Image",
+                        "assetUrl": "https://example.com/person.png",
+                        "status": "ACTIVE"
+                      }
+                    ],
+                    "total": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AICCNotFound" },
+          "405": { "$ref": "#/components/responses/MethodNotAllowed" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/asset/{asset_id}": {
+      "get": {
+        "tags": ["移动视频-素材库"],
+        "summary": "查询单个移动视频素材",
+        "operationId": "getCmccAICCAsset",
+        "description": "根据移动视频素材 ID 查询素材详情和当前状态。",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "description": "上传素材接口返回的素材 ID。",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "cmcc-asset-id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "素材详情查询成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AICCAssetGetResponse"
+                },
+                "example": {
+                  "body": {
+                    "assetId": "cmcc-asset-id",
+                    "groupId": "cmcc-group-id",
+                    "assetName": "person-reference",
+                    "assetType": "Image",
+                    "assetUrl": "https://example.com/person.png",
+                    "status": "Active"
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AICCNotFound" },
+          "405": { "$ref": "#/components/responses/MethodNotAllowed" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/real-person-auth/sessions": {
+      "post": {
+        "tags": ["移动视频-真人认证"],
+        "summary": "创建移动视频真人认证会话",
+        "operationId": "createCmccAICCRealPersonSession",
+        "description": "创建一次真人认证会话。成功后应立即打开 `body.h5Link`，并妥善保存仅供后续查询使用的 `body.bytedToken`。`expiresIn` 表示会话有效秒数。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AICCRealPersonSessionCreateRequest"
+              },
+              "example": {
+                "callbackUrl": "https://example.com/callback"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真人认证会话创建成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AICCRealPersonSessionCreateResponse"
+                },
+                "example": {
+                  "body": {
+                    "bytedToken": "token-from-session",
+                    "h5Link": "https://h5.example.com/verify",
+                    "expiresIn": 1800
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AICCNotFound" },
+          "405": { "$ref": "#/components/responses/MethodNotAllowed" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/openapi-maas/exp/aicc/v2/real-person-auth/asset-group/by-byted-token": {
+      "post": {
+        "tags": ["移动视频-真人认证"],
+        "summary": "查询移动视频真人素材组",
+        "operationId": "getCmccAICCRealPersonAssetGroupByBytedToken",
+        "description": "使用真人认证会话返回的 bytedToken 查询认证产生的素材组。仅应在本人完成认证后调用；成功响应的 `body` 是真人素材组 ID。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AICCRealPersonAssetGroupRequest"
+              },
+              "example": {
+                "bytedToken": "token-from-session"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真人素材组查询成功，`body` 为素材组 ID。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AICCRealPersonAssetGroupResponse"
+                },
+                "example": {
+                  "body": "cmcc-real-person-group-id"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AssetUnauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/AICCNotFound" },
+          "405": { "$ref": "#/components/responses/MethodNotAllowed" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
     }
   },
   "components": {
@@ -854,6 +1164,48 @@
               "error": {
                 "message": "no upstream route for api key, model, and action",
                 "code": "no_upstream_route"
+              }
+            }
+          }
+        }
+      },
+      "AICCNotFound": {
+        "description": "指定的移动视频资源不存在，或当前 API Key 与操作没有匹配的移动视频上游路由。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "resourceNotFound": {
+                "summary": "上游资源不存在",
+                "value": {
+                  "error": {
+                    "message": "resource not found",
+                    "code": "not_found"
+                  }
+                }
+              },
+              "routeNotFound": {
+                "summary": "未配置匹配路由",
+                "value": {
+                  "error": {
+                    "message": "no upstream route for api key, model, and action",
+                    "code": "no_upstream_route"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "请求方法不受该移动视频接口支持。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "error": {
+                "message": "method not allowed",
+                "code": "method_not_allowed"
               }
             }
           }
@@ -1577,6 +1929,277 @@
           }
         },
         "required": ["state", "data", "error"]
+      },
+      "AICCAssetGroupCreateRequest": {
+        "type": "object",
+        "properties": {
+          "groupName": {
+            "type": "string",
+            "description": "素材组名称。"
+          },
+          "description": {
+            "type": "string",
+            "description": "素材组描述，可选。"
+          },
+          "groupType": {
+            "type": "string",
+            "description": "素材组类型，可选，例如 AIGC。"
+          }
+        },
+        "required": ["groupName"]
+      },
+      "AICCAssetGroup": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "description": "移动视频素材组 ID。"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "素材组名称。"
+          },
+          "description": {
+            "type": "string",
+            "description": "素材组描述。"
+          },
+          "groupType": {
+            "type": "string",
+            "description": "素材组类型。"
+          },
+          "createTime": {
+            "type": "string",
+            "description": "上游返回的创建时间。"
+          },
+          "updateTime": {
+            "type": "string",
+            "description": "上游返回的更新时间。"
+          }
+        },
+        "additionalProperties": true
+      },
+      "AICCAssetGroupCreateResponse": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/AICCAssetGroup"
+          }
+        }
+      },
+      "AICCAssetCreateRequest": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "description": "目标移动视频素材组 ID。"
+          },
+          "assetUrl": {
+            "type": "string",
+            "description": "上游能够访问的素材 URL。"
+          },
+          "assetName": {
+            "type": "string",
+            "description": "素材名称，可选。"
+          },
+          "assetType": {
+            "type": "string",
+            "description": "素材类型，可选，例如 Image。"
+          }
+        },
+        "required": ["groupId", "assetUrl"]
+      },
+      "AICCAssetCreateResponse": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "创建成功的移动视频素材 ID。"
+          }
+        }
+      },
+      "AICCAssetQueryRequest": {
+        "type": "object",
+        "properties": {
+          "groupIds": {
+            "type": "array",
+            "description": "需要查询的素材组 ID 数组。",
+            "items": {
+              "type": "string"
+            }
+          },
+          "groupType": {
+            "type": "string",
+            "description": "素材组类型过滤条件，可选。"
+          },
+          "assetName": {
+            "type": "string",
+            "description": "素材名称过滤条件，可选。"
+          },
+          "assetType": {
+            "type": "string",
+            "description": "素材类型过滤条件，可选。"
+          },
+          "statuses": {
+            "type": "array",
+            "description": "素材状态过滤条件，可选。",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pageNo": {
+            "type": "integer",
+            "description": "页码。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页条数。"
+          }
+        },
+        "required": ["groupIds", "pageNo", "pageSize"]
+      },
+      "AICCAsset": {
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "description": "移动视频素材 ID。"
+          },
+          "groupId": {
+            "type": "string",
+            "description": "所属移动视频素材组 ID。"
+          },
+          "assetName": {
+            "type": "string",
+            "description": "素材名称。"
+          },
+          "assetType": {
+            "type": "string",
+            "description": "素材类型。"
+          },
+          "assetUrl": {
+            "type": "string",
+            "description": "素材地址。"
+          },
+          "status": {
+            "type": "string",
+            "description": "素材状态；具体大小写和值以上游实际返回为准。"
+          },
+          "createTime": {
+            "type": "string",
+            "description": "上游返回的创建时间。"
+          },
+          "updateTime": {
+            "type": "string",
+            "description": "上游返回的更新时间。"
+          }
+        },
+        "additionalProperties": true
+      },
+      "AICCAssetListBody": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "description": "当前页素材列表。",
+            "items": {
+              "$ref": "#/components/schemas/AICCAsset"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "符合查询条件的素材总数。"
+          },
+          "dataRows": {
+            "type": "array",
+            "description": "部分上游响应使用的素材列表兼容字段。",
+            "items": {
+              "$ref": "#/components/schemas/AICCAsset"
+            }
+          },
+          "totalSize": {
+            "type": "integer",
+            "description": "部分上游响应使用的素材总数兼容字段。"
+          },
+          "pageNo": {
+            "type": "integer",
+            "description": "上游返回的当前页码。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "上游返回的每页条数。"
+          }
+        },
+        "additionalProperties": true
+      },
+      "AICCAssetQueryResponse": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/AICCAssetListBody"
+          }
+        }
+      },
+      "AICCAssetGetResponse": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/AICCAsset"
+          }
+        }
+      },
+      "AICCRealPersonSessionCreateRequest": {
+        "type": "object",
+        "properties": {
+          "callbackUrl": {
+            "type": "string",
+            "description": "认证完成后的回调地址，可选。"
+          }
+        }
+      },
+      "AICCRealPersonSessionBody": {
+        "type": "object",
+        "properties": {
+          "bytedToken": {
+            "type": "string",
+            "description": "后续查询真人素材组使用的敏感会话凭证。"
+          },
+          "h5Link": {
+            "type": "string",
+            "description": "真人认证 H5 页面地址。"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "会话有效期，单位为秒。"
+          }
+        },
+        "additionalProperties": true
+      },
+      "AICCRealPersonSessionCreateResponse": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/AICCRealPersonSessionBody"
+          }
+        }
+      },
+      "AICCRealPersonAssetGroupRequest": {
+        "type": "object",
+        "properties": {
+          "bytedToken": {
+            "type": "string",
+            "description": "创建真人认证会话后返回的 bytedToken。"
+          }
+        },
+        "required": ["bytedToken"]
+      },
+      "AICCRealPersonAssetGroupResponse": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "真人认证产生的移动视频素材组 ID。"
+          }
+        }
       },
       "ErrorResponse": {
         "type": "object",

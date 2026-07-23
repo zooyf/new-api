@@ -316,15 +316,20 @@ type RouteDecision struct {
 func RouteDecisionFor(method string, path string) RouteDecision {
 	method = strings.ToUpper(method)
 	exactRoutes := map[string]map[string]bool{
-		"/api/v3/ark/assets":                        {"GET": true, "POST": true},
-		"/api/v3/ark/assets/groups":                 {"POST": true},
-		"/api/v3/ark/real-person/assets":            {"POST": true},
-		"/api/v3/ark/real-person/validate/sessions": {"POST": true},
-		"/api/v3/open/CreateAsset":                  {"POST": true},
-		"/api/v3/open/GetAsset":                     {"POST": true},
-		"/api/v3/open/CreateVisualValidateSession":  {"POST": true},
-		"/api/v3/open/GetVisualValidateResult":      {"POST": true},
-		"/api/v3/open/CreateAssetGroup":             {"POST": true},
+		"/api/openapi-maas/exp/aicc/v2/asset-group/":                                {"POST": true},
+		"/api/openapi-maas/exp/aicc/v2/asset/":                                      {"POST": true},
+		"/api/openapi-maas/exp/aicc/v2/asset/query":                                 {"POST": true},
+		"/api/openapi-maas/exp/aicc/v2/real-person-auth/sessions":                   {"POST": true},
+		"/api/openapi-maas/exp/aicc/v2/real-person-auth/asset-group/by-byted-token": {"POST": true},
+		"/api/v3/ark/assets":                                                        {"GET": true, "POST": true},
+		"/api/v3/ark/assets/groups":                                                 {"POST": true},
+		"/api/v3/ark/real-person/assets":                                            {"POST": true},
+		"/api/v3/ark/real-person/validate/sessions":                                 {"POST": true},
+		"/api/v3/open/CreateAsset":                                                  {"POST": true},
+		"/api/v3/open/GetAsset":                                                     {"POST": true},
+		"/api/v3/open/CreateVisualValidateSession":                                  {"POST": true},
+		"/api/v3/open/GetVisualValidateResult":                                      {"POST": true},
+		"/api/v3/open/CreateAssetGroup":                                             {"POST": true},
 	}
 	if methods, ok := exactRoutes[path]; ok {
 		return RouteDecision{
@@ -334,6 +339,7 @@ func RouteDecisionFor(method string, path string) RouteDecision {
 	}
 
 	getOnlyPrefixes := []string{
+		"/api/openapi-maas/exp/aicc/v2/asset/",
 		"/api/v3/ark/assets/",
 		"/api/v3/ark/real-person/assets/",
 		"/api/v3/ark/real-person/validate/sessions/",

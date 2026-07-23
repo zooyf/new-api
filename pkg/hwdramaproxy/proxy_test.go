@@ -63,6 +63,16 @@ func TestRouteDecisionFor(t *testing.T) {
 		{name: "seedance create asset group", method: http.MethodPost, path: "/api/v3/open/CreateAssetGroup", pathKnown: true, methodAllowed: true},
 		{name: "private seedance bill endpoint", method: http.MethodPost, path: "/api/v3/open/ListSplitBillDetail", pathKnown: false, methodAllowed: false},
 		{name: "unknown path", method: http.MethodPost, path: "/api/v3/open/DeleteAsset", pathKnown: false, methodAllowed: false},
+		{name: "aicc create asset group", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset-group/", pathKnown: true, methodAllowed: true},
+		{name: "aicc create asset", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset/", pathKnown: true, methodAllowed: true},
+		{name: "aicc query assets", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset/query", pathKnown: true, methodAllowed: true},
+		{name: "aicc query assets wrong method", method: http.MethodGet, path: "/api/openapi-maas/exp/aicc/v2/asset/query", pathKnown: true, methodAllowed: false},
+		{name: "aicc get asset", method: http.MethodGet, path: "/api/openapi-maas/exp/aicc/v2/asset/cmcc-asset-id", pathKnown: true, methodAllowed: true},
+		{name: "aicc get asset wrong method", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset/cmcc-asset-id", pathKnown: true, methodAllowed: false},
+		{name: "aicc nested asset path rejected", method: http.MethodGet, path: "/api/openapi-maas/exp/aicc/v2/asset/cmcc-asset-id/extra", pathKnown: false, methodAllowed: false},
+		{name: "aicc create real person session", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/real-person-auth/sessions", pathKnown: true, methodAllowed: true},
+		{name: "aicc get real person asset group", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/real-person-auth/asset-group/by-byted-token", pathKnown: true, methodAllowed: true},
+		{name: "aicc private path rejected", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/private/billing", pathKnown: false, methodAllowed: false},
 	}
 
 	for _, tt := range tests {
