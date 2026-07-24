@@ -141,12 +141,13 @@ func (p *Proxy) serveLegacy(w http.ResponseWriter, r *http.Request) {
 
 	p.proxyRequest(w, r, RouteMatch{
 		UpstreamBaseURL:    p.upstream,
+		UpstreamAuthType:   UpstreamAuthTypeHeader,
 		UpstreamAPIKey:     p.upstreamAPIKey,
 		UpstreamMethod:     r.Method,
 		UpstreamPath:       r.URL.Path,
 		UpstreamAuthHeader: "Authorization",
 		UpstreamAuthPrefix: "Bearer",
-	}, token.ID, "")
+	}, token.ID, "", "", nil)
 }
 
 func (p *Proxy) serveDynamic(w http.ResponseWriter, r *http.Request) {
@@ -185,11 +186,6 @@ func (p *Proxy) serveDynamic(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid_request", "failed to parse request body")
 		return
 	}
-	if body != nil {
-		r.Body = io.NopCloser(bytes.NewReader(body))
-		r.ContentLength = int64(len(body))
-	}
-
 	route, ok, err := router.Match(token.ID, modelName, action)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "configuration_error", err.Error())
@@ -200,10 +196,60 @@ func (p *Proxy) serveDynamic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.proxyRequest(w, r, route, token.ID, action.Config.AffinityResponseField)
+	affinityPathValue := ""
+	if action.Config.AffinityPathParam != "" {
+		affinityPathValue = action.Params[action.Config.AffinityPathParam]
+	}
+	scopePathValue := ""
+	if action.Config.ScopePathParam != "" {
+		scopePathValue = action.Params[action.Config.ScopePathParam]
+	}
+	body, scopedRequest, emptyList, err := prepareScopedAssetRequest(
+		action.Config.ScopeOperation,
+		scopePathValue,
+		body,
+		route,
+		token.ID,
+	)
+	if err != nil {
+		var scopeErr *scopedAssetError
+		if errors.As(err, &scopeErr) {
+			writeJSONError(w, scopeErr.Status, scopeErr.Code, scopeErr.Message)
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "database_error", "failed to apply asset scope")
+		return
+	}
+	if emptyList {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(emptyScopedListResponse())
+		return
+	}
+	if body != nil {
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.ContentLength = int64(len(body))
+	}
+	p.proxyRequest(
+		w,
+		r,
+		route,
+		token.ID,
+		action.Config.AffinityResponseField,
+		affinityPathValue,
+		scopedRequest,
+	)
 }
 
-func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, route RouteMatch, tokenID int, affinityResponseField string) {
+func (p *Proxy) proxyRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	route RouteMatch,
+	tokenID int,
+	affinityResponseField string,
+	affinityPathValue string,
+	scopedRequest *scopedAssetRequest,
+) {
 	upstreamURL := *r.URL
 	rewriteRequestURL(&upstreamURL, route.UpstreamBaseURL, route.UpstreamPath)
 	req, err := http.NewRequestWithContext(r.Context(), route.UpstreamMethod, upstreamURL.String(), r.Body)
@@ -221,20 +267,55 @@ func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, route Route
 		authHeader = "Authorization"
 	}
 	req.Header.Del(authHeader)
-	authValue := route.UpstreamAPIKey
-	if prefix := strings.TrimSpace(route.UpstreamAuthPrefix); prefix != "" {
-		authValue = prefix + " " + authValue
+	upstreamAuthType := strings.TrimSpace(route.UpstreamAuthType)
+	if upstreamAuthType == "" {
+		upstreamAuthType = UpstreamAuthTypeHeader
 	}
-	req.Header.Set(authHeader, authValue)
+	switch upstreamAuthType {
+	case UpstreamAuthTypeHeader:
+		authValue := route.UpstreamAPIKey
+		if prefix := strings.TrimSpace(route.UpstreamAuthPrefix); prefix != "" {
+			authValue = prefix + " " + authValue
+		}
+		req.Header.Set(authHeader, authValue)
+	case UpstreamAuthTypeMobileCloudAKSK:
+		nonce, nonceErr := newMobileCloudNonce()
+		if nonceErr != nil {
+			writeJSONError(w, http.StatusBadGateway, "upstream_error", "failed to create upstream request signature")
+			return
+		}
+		if signErr := signMobileCloudRequest(req, route.UpstreamAccessKey, route.UpstreamSecretKey, time.Now(), nonce); signErr != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid_request", signErr.Error())
+			return
+		}
+	default:
+		writeJSONError(w, http.StatusInternalServerError, "configuration_error", "unsupported upstream authentication type")
+		return
+	}
 
-	resp, err := p.client.Do(req)
+	client := p.client
+	if upstreamAuthType == UpstreamAuthTypeMobileCloudAKSK {
+		clientCopy := *p.client
+		clientCopy.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		client = &clientCopy
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "upstream_error", "failed to reach upstream server")
 		return
 	}
 	defer resp.Body.Close()
+	if upstreamAuthType == UpstreamAuthTypeMobileCloudAKSK &&
+		resp.StatusCode >= http.StatusMultipleChoices &&
+		resp.StatusCode < http.StatusBadRequest &&
+		strings.TrimSpace(resp.Header.Get("Location")) != "" {
+		writeJSONError(w, http.StatusBadGateway, "upstream_error", "upstream redirect rejected")
+		return
+	}
 
-	if affinityResponseField == "" {
+	if affinityResponseField == "" && strings.TrimSpace(affinityPathValue) == "" && scopedRequest == nil {
 		copyHeader(w.Header(), resp.Header)
 		removeHopByHopHeaders(w.Header())
 		w.WriteHeader(resp.StatusCode)
@@ -246,21 +327,41 @@ func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, route Route
 		writeJSONError(w, http.StatusBadGateway, "upstream_error", "failed to read upstream response")
 		return
 	}
-	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
-		externalID := strings.TrimSpace(gjson.GetBytes(body, affinityResponseField).String())
-		if externalID == "" {
-			if upstreamCode, upstreamMessage, ok := parseUpstreamBusinessError(body); ok {
-				writeJSONError(w, http.StatusBadRequest, upstreamCode, upstreamMessage)
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices && canPersistAffinity(body) {
+		if scopedRequest != nil {
+			if err := persistScopedAssetResponse(body, scopedRequest); err != nil {
+				var scopeErr *scopedAssetError
+				if errors.As(err, &scopeErr) {
+					writeJSONError(w, scopeErr.Status, scopeErr.Code, scopeErr.Message)
+					return
+				}
+				writeJSONError(w, http.StatusInternalServerError, "database_error", "failed to persist scoped asset metadata")
 				return
 			}
-			writeJSONError(w, http.StatusBadGateway, "upstream_error", "upstream response did not contain the configured asset identifier")
-			return
+			w.Header().Set("X-New-Api-Asset-Namespace", route.AssetNamespaceID)
+		} else {
+			externalIDs := extractAffinityIDs(body, affinityResponseField)
+			if value := strings.TrimSpace(affinityPathValue); value != "" {
+				externalIDs = append(externalIDs, value)
+			}
+			seen := make(map[string]bool, len(externalIDs))
+			persisted := false
+			for _, externalID := range externalIDs {
+				externalID = strings.TrimSpace(externalID)
+				if externalID == "" || seen[externalID] {
+					continue
+				}
+				seen[externalID] = true
+				if err := model.UpsertAssetChannelBinding(externalID, route.AssetNamespaceID, route.ChannelID, tokenID); err != nil {
+					writeJSONError(w, http.StatusInternalServerError, "database_error", "failed to persist asset channel affinity")
+					return
+				}
+				persisted = true
+			}
+			if persisted {
+				w.Header().Set("X-New-Api-Asset-Namespace", route.AssetNamespaceID)
+			}
 		}
-		if err := model.UpsertAssetChannelBinding(externalID, route.AssetNamespaceID, route.ChannelID, tokenID); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "database_error", "failed to persist asset channel affinity")
-			return
-		}
-		w.Header().Set("X-New-Api-Asset-Namespace", route.AssetNamespaceID)
 	}
 	copyHeader(w.Header(), resp.Header)
 	removeHopByHopHeaders(w.Header())
@@ -283,6 +384,21 @@ func (p *Proxy) ReloadRoutes() error {
 	router, err := BuildRuntimeRouter(config, secrets.Lookup)
 	if err != nil {
 		return err
+	}
+	for _, route := range config.Routes {
+		if route.AssetScopeID == "" {
+			continue
+		}
+		for _, tokenID := range route.APIKeyIDs {
+			if err := model.UpsertAssetScopeTokenBinding(
+				route.AssetNamespaceID,
+				route.AssetScopeID,
+				route.ChannelID,
+				tokenID,
+			); err != nil {
+				return fmt.Errorf("register route %s asset scope for api_key_id %d: %w", route.Name, tokenID, err)
+			}
+		}
 	}
 	p.runtimeRouter.Store(router)
 	return nil
@@ -316,9 +432,12 @@ type RouteDecision struct {
 func RouteDecisionFor(method string, path string) RouteDecision {
 	method = strings.ToUpper(method)
 	exactRoutes := map[string]map[string]bool{
+		"/api/openapi-maas/exp/aicc/v2/asset-group":                                 {"POST": true},
 		"/api/openapi-maas/exp/aicc/v2/asset-group/":                                {"POST": true},
+		"/api/openapi-maas/exp/aicc/v2/asset":                                       {"POST": true},
 		"/api/openapi-maas/exp/aicc/v2/asset/":                                      {"POST": true},
 		"/api/openapi-maas/exp/aicc/v2/asset/query":                                 {"POST": true},
+		"/api/openapi-maas/exp/aicc/v2/asset-group/query":                           {"POST": true},
 		"/api/openapi-maas/exp/aicc/v2/real-person-auth/sessions":                   {"POST": true},
 		"/api/openapi-maas/exp/aicc/v2/real-person-auth/asset-group/by-byted-token": {"POST": true},
 		"/api/v3/ark/assets":                                                        {"GET": true, "POST": true},
@@ -338,17 +457,36 @@ func RouteDecisionFor(method string, path string) RouteDecision {
 		}
 	}
 
-	getOnlyPrefixes := []string{
-		"/api/openapi-maas/exp/aicc/v2/asset/",
-		"/api/v3/ark/assets/",
-		"/api/v3/ark/real-person/assets/",
-		"/api/v3/ark/real-person/validate/sessions/",
+	pathRoutes := []struct {
+		prefix  string
+		methods map[string]bool
+	}{
+		{
+			prefix:  "/api/openapi-maas/exp/aicc/v2/asset/",
+			methods: map[string]bool{"GET": true, "PUT": true, "DELETE": true},
+		},
+		{
+			prefix:  "/api/openapi-maas/exp/aicc/v2/asset-group/",
+			methods: map[string]bool{"GET": true, "PUT": true, "DELETE": true},
+		},
+		{
+			prefix:  "/api/v3/ark/assets/",
+			methods: map[string]bool{"GET": true},
+		},
+		{
+			prefix:  "/api/v3/ark/real-person/assets/",
+			methods: map[string]bool{"GET": true},
+		},
+		{
+			prefix:  "/api/v3/ark/real-person/validate/sessions/",
+			methods: map[string]bool{"GET": true},
+		},
 	}
-	for _, prefix := range getOnlyPrefixes {
-		if hasSinglePathSegmentAfterPrefix(path, prefix) {
+	for _, route := range pathRoutes {
+		if hasSinglePathSegmentAfterPrefix(path, route.prefix) {
 			return RouteDecision{
 				PathKnown:     true,
-				MethodAllowed: method == http.MethodGet,
+				MethodAllowed: route.methods[method],
 			}
 		}
 	}
@@ -413,11 +551,45 @@ func rewriteRequestURL(reqURL *url.URL, target *url.URL, upstreamPath string) {
 	reqURL.Scheme = target.Scheme
 	reqURL.Host = target.Host
 	reqURL.Path = singleJoiningSlash(target.Path, upstreamPath)
+	reqURL.RawPath = ""
 	if targetQuery == "" || reqURL.RawQuery == "" {
 		reqURL.RawQuery = targetQuery + reqURL.RawQuery
 	} else {
 		reqURL.RawQuery = targetQuery + "&" + reqURL.RawQuery
 	}
+}
+
+func extractAffinityIDs(body []byte, field string) []string {
+	field = strings.TrimSpace(field)
+	if field == "" {
+		return nil
+	}
+	result := gjson.GetBytes(body, field)
+	if !result.Exists() {
+		return nil
+	}
+	if result.IsArray() {
+		values := result.Array()
+		ids := make([]string, 0, len(values))
+		for _, value := range values {
+			if value.Type == gjson.String {
+				ids = append(ids, value.String())
+			}
+		}
+		return ids
+	}
+	if result.Type != gjson.String {
+		return nil
+	}
+	return []string{result.String()}
+}
+
+func canPersistAffinity(body []byte) bool {
+	if _, _, isBusinessError := parseUpstreamBusinessError(body); isBusinessError {
+		return false
+	}
+	state := gjson.GetBytes(body, "state")
+	return state.Type != gjson.String || !strings.EqualFold(strings.TrimSpace(state.String()), "ERROR")
 }
 
 type requestModelPayload struct {

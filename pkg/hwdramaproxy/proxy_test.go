@@ -64,11 +64,19 @@ func TestRouteDecisionFor(t *testing.T) {
 		{name: "private seedance bill endpoint", method: http.MethodPost, path: "/api/v3/open/ListSplitBillDetail", pathKnown: false, methodAllowed: false},
 		{name: "unknown path", method: http.MethodPost, path: "/api/v3/open/DeleteAsset", pathKnown: false, methodAllowed: false},
 		{name: "aicc create asset group", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset-group/", pathKnown: true, methodAllowed: true},
+		{name: "aicc create asset group without trailing slash", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset-group", pathKnown: true, methodAllowed: true},
 		{name: "aicc create asset", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset/", pathKnown: true, methodAllowed: true},
+		{name: "aicc create asset without trailing slash", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset", pathKnown: true, methodAllowed: true},
 		{name: "aicc query assets", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset/query", pathKnown: true, methodAllowed: true},
+		{name: "aicc query asset groups", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset-group/query", pathKnown: true, methodAllowed: true},
 		{name: "aicc query assets wrong method", method: http.MethodGet, path: "/api/openapi-maas/exp/aicc/v2/asset/query", pathKnown: true, methodAllowed: false},
 		{name: "aicc get asset", method: http.MethodGet, path: "/api/openapi-maas/exp/aicc/v2/asset/cmcc-asset-id", pathKnown: true, methodAllowed: true},
-		{name: "aicc get asset wrong method", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset/cmcc-asset-id", pathKnown: true, methodAllowed: false},
+		{name: "aicc update asset", method: http.MethodPut, path: "/api/openapi-maas/exp/aicc/v2/asset/cmcc-asset-id", pathKnown: true, methodAllowed: true},
+		{name: "aicc delete asset", method: http.MethodDelete, path: "/api/openapi-maas/exp/aicc/v2/asset/cmcc-asset-id", pathKnown: true, methodAllowed: true},
+		{name: "aicc get asset group", method: http.MethodGet, path: "/api/openapi-maas/exp/aicc/v2/asset-group/cmcc-group-id", pathKnown: true, methodAllowed: true},
+		{name: "aicc update asset group", method: http.MethodPut, path: "/api/openapi-maas/exp/aicc/v2/asset-group/cmcc-group-id", pathKnown: true, methodAllowed: true},
+		{name: "aicc delete asset group", method: http.MethodDelete, path: "/api/openapi-maas/exp/aicc/v2/asset-group/cmcc-group-id", pathKnown: true, methodAllowed: true},
+		{name: "aicc asset wrong method", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/asset/cmcc-asset-id", pathKnown: true, methodAllowed: false},
 		{name: "aicc nested asset path rejected", method: http.MethodGet, path: "/api/openapi-maas/exp/aicc/v2/asset/cmcc-asset-id/extra", pathKnown: false, methodAllowed: false},
 		{name: "aicc create real person session", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/real-person-auth/sessions", pathKnown: true, methodAllowed: true},
 		{name: "aicc get real person asset group", method: http.MethodPost, path: "/api/openapi-maas/exp/aicc/v2/real-person-auth/asset-group/by-byted-token", pathKnown: true, methodAllowed: true},
@@ -276,6 +284,10 @@ func TestProxyClassifiesAffinityResponses(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error":{"code":"invalid_asset","message":"asset rejected"}}`))
 		case "/success":
 			_, _ = w.Write([]byte(`{"state":1,"data":{"Id":"asset-affinity-1"},"error":null}`))
+		case "/array-success":
+			_, _ = w.Write([]byte(`{"state":"OK","body":{"data":[{"assetId":"asset-affinity-1"},{"assetId":"asset-affinity-2"}]}}`))
+		case "/official-business-error":
+			_, _ = w.Write([]byte(`{"requestId":"req-error","state":"ERROR","errorCode":"AssetNotFound","errorMessage":"asset not found","body":null}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -299,18 +311,23 @@ func TestProxyClassifiesAffinityResponses(t *testing.T) {
 		upstreamTrace   string
 		namespaceHeader string
 		expectedBinding bool
+		expectedCount   int64
+		affinityField   string
+		affinityPathID  string
 	}{
 		{
-			name:         "business error encoded as HTTP 200",
-			upstreamPath: "/business-error",
-			status:       http.StatusBadRequest,
-			body:         `{"error":{"code":"InvalidParameter.WidthTooSmall","message":"Width must be between 300px and 6000px."}}`,
+			name:          "business error encoded as HTTP 200",
+			upstreamPath:  "/business-error",
+			status:        http.StatusOK,
+			body:          `{"state":1,"data":{"Code":"InvalidParameter.WidthTooSmall","Message":"Width must be between 300px and 6000px.","Data":null},"error":null}`,
+			affinityField: "data.Id",
 		},
 		{
-			name:         "unknown successful response without identifier",
-			upstreamPath: "/missing-id",
-			status:       http.StatusBadGateway,
-			body:         `{"error":{"code":"upstream_error","message":"upstream response did not contain the configured asset identifier"}}`,
+			name:          "unknown successful response without identifier",
+			upstreamPath:  "/missing-id",
+			status:        http.StatusOK,
+			body:          `{"state":1,"data":{"Message":"still processing"},"error":null}`,
+			affinityField: "data.Id",
 		},
 		{
 			name:          "non 2xx response passes through",
@@ -318,6 +335,7 @@ func TestProxyClassifiesAffinityResponses(t *testing.T) {
 			status:        http.StatusUnprocessableEntity,
 			body:          `{"error":{"code":"invalid_asset","message":"asset rejected"}}`,
 			upstreamTrace: "trace-422",
+			affinityField: "data.Id",
 		},
 		{
 			name:            "successful response persists affinity",
@@ -326,6 +344,25 @@ func TestProxyClassifiesAffinityResponses(t *testing.T) {
 			body:            `{"state":1,"data":{"Id":"asset-affinity-1"},"error":null}`,
 			namespaceHeader: "seedance-domestic",
 			expectedBinding: true,
+			expectedCount:   1,
+			affinityField:   "data.Id",
+		},
+		{
+			name:            "array response persists every asset affinity",
+			upstreamPath:    "/array-success",
+			status:          http.StatusOK,
+			body:            `{"state":"OK","body":{"data":[{"assetId":"asset-affinity-1"},{"assetId":"asset-affinity-2"}]}}`,
+			namespaceHeader: "seedance-domestic",
+			expectedBinding: true,
+			expectedCount:   2,
+			affinityField:   "body.data.#.assetId",
+		},
+		{
+			name:           "official business error passes through without path affinity",
+			upstreamPath:   "/official-business-error",
+			status:         http.StatusOK,
+			body:           `{"requestId":"req-error","state":"ERROR","errorCode":"AssetNotFound","errorMessage":"asset not found","body":null}`,
+			affinityPathID: "asset-from-path",
 		},
 	}
 
@@ -342,7 +379,7 @@ func TestProxyClassifiesAffinityResponses(t *testing.T) {
 				UpstreamPath:       tt.upstreamPath,
 				AssetNamespaceID:   "seedance-domestic",
 				UpstreamAuthHeader: "lmd-key",
-			}, 17, "data.Id")
+			}, 17, tt.affinityField, tt.affinityPathID, nil)
 
 			assert.Equal(t, tt.status, resp.Code)
 			assert.JSONEq(t, tt.body, resp.Body.String())
@@ -353,7 +390,7 @@ func TestProxyClassifiesAffinityResponses(t *testing.T) {
 			var count int64
 			require.NoError(t, model.DB.Model(&model.AssetChannelBinding{}).Count(&count).Error)
 			if tt.expectedBinding {
-				assert.EqualValues(t, 1, count)
+				assert.Equal(t, tt.expectedCount, count)
 				var binding model.AssetChannelBinding
 				require.NoError(t, model.DB.Where("external_id = ?", "asset-affinity-1").First(&binding).Error)
 				assert.Equal(t, "seedance-domestic", binding.NamespaceID)

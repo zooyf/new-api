@@ -24,14 +24,78 @@ import { DocsSidebar } from './components/docs-sidebar'
 import { EndpointAside } from './components/endpoint-aside'
 import { EndpointDetail } from './components/endpoint-detail'
 import { buildDocModel } from './lib/openapi-doc'
+import mobileOfficialSpec from './openapi-mobile-official-spec.json'
 import openApiSpec from './openapi-spec.json'
 import type { DocSource, OpenApiSpec } from './types'
+
+const legacySpec = openApiSpec as unknown as OpenApiSpec
+const mobileSpec = mobileOfficialSpec as unknown as OpenApiSpec
+const mobilePathPrefix = '/api/openapi-maas/exp/aicc/v2/'
+const replacedVideoPaths = new Set([
+  '/v1/video/generations',
+  '/v1/video/generations/{task_id}',
+])
+const legacyComponents = (
+  legacySpec as unknown as { components?: Record<string, unknown> }
+).components
+const mobileComponents = (
+  mobileSpec as unknown as { components?: Record<string, unknown> }
+).components
+const mergedSpec = {
+  ...legacySpec,
+  info: {
+    ...legacySpec.info,
+    version: '2026-07-24.2',
+    description:
+      'Nexus Reach 对外 API 文档。移动官方 Seedance 2.0 视频生成、素材库管理和真人认证的 14 个接口已统一归入“移动官方视频生成和素材库管理”分组；其余既有接口保持原分组和契约。',
+  },
+  tags: [
+    ...(legacySpec.tags ?? []).filter(
+      (tag) =>
+        tag.name !== '移动视频-素材库' && tag.name !== '移动视频-真人认证'
+    ),
+    ...(mobileSpec.tags ?? []),
+  ],
+  paths: {
+    ...Object.fromEntries(
+      Object.entries(legacySpec.paths).filter(
+        ([path]) =>
+          !path.startsWith(mobilePathPrefix) && !replacedVideoPaths.has(path)
+      )
+    ),
+    ...mobileSpec.paths,
+  },
+  components: {
+    ...legacyComponents,
+    ...mobileComponents,
+    securitySchemes: {
+      ...(legacyComponents?.securitySchemes as
+        | Record<string, unknown>
+        | undefined),
+      ...(mobileComponents?.securitySchemes as
+        | Record<string, unknown>
+        | undefined),
+    },
+    parameters: {
+      ...(legacyComponents?.parameters as Record<string, unknown> | undefined),
+      ...(mobileComponents?.parameters as Record<string, unknown> | undefined),
+    },
+    responses: {
+      ...(mobileComponents?.responses as Record<string, unknown> | undefined),
+      ...(legacyComponents?.responses as Record<string, unknown> | undefined),
+    },
+    schemas: {
+      ...legacySpec.components?.schemas,
+      ...mobileSpec.components?.schemas,
+    },
+  },
+} as unknown as OpenApiSpec
 
 const DOC_SOURCE: DocSource = {
   id: 'seedance-domestic',
   title: 'Seedance 2.0 API',
   subtitle: 'Seedance 2.0 domestic video and asset endpoints',
-  spec: openApiSpec as unknown as OpenApiSpec,
+  spec: mergedSpec,
 }
 
 function pickDefaultEndpointId(doc: ReturnType<typeof buildDocModel>): string {

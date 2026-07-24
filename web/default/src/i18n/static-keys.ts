@@ -34,6 +34,9 @@ export const STATIC_I18N_KEYS = [
   'Channel health checks',
   'Request retry',
 
+  // Channel types
+  'Mobile Cloud Seedance',
+
   // System settings sidebar
   'System Administration',
   'General',

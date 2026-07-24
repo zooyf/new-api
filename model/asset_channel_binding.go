@@ -11,6 +11,8 @@ type AssetChannelBinding struct {
 	ID          int64  `json:"id" gorm:"primaryKey"`
 	ExternalID  string `json:"external_id" gorm:"type:varchar(191);uniqueIndex"`
 	NamespaceID string `json:"namespace_id" gorm:"type:varchar(100);index"`
+	ScopeID     string `json:"scope_id" gorm:"type:varchar(100);index"`
+	GroupID     string `json:"group_id" gorm:"type:varchar(191);index"`
 	ChannelID   int    `json:"channel_id" gorm:"index"`
 	TokenID     int    `json:"token_id" gorm:"index"`
 	CreatedAt   int64  `json:"created_at"`
@@ -18,6 +20,31 @@ type AssetChannelBinding struct {
 }
 
 func UpsertAssetChannelBinding(externalID string, namespaceID string, channelID int, tokenID int) error {
+	return upsertAssetChannelBinding(externalID, "", namespaceID, "", channelID, tokenID)
+}
+
+func UpsertScopedAssetChannelBinding(
+	externalID string,
+	groupID string,
+	namespaceID string,
+	scopeID string,
+	channelID int,
+	tokenID int,
+) error {
+	if scopeID == "" {
+		return fmt.Errorf("asset scope is required")
+	}
+	return upsertAssetChannelBinding(externalID, groupID, namespaceID, scopeID, channelID, tokenID)
+}
+
+func upsertAssetChannelBinding(
+	externalID string,
+	groupID string,
+	namespaceID string,
+	scopeID string,
+	channelID int,
+	tokenID int,
+) error {
 	if externalID == "" || namespaceID == "" || channelID <= 0 || tokenID <= 0 {
 		return fmt.Errorf("asset channel binding is incomplete")
 	}
@@ -25,6 +52,8 @@ func UpsertAssetChannelBinding(externalID string, namespaceID string, channelID 
 	binding := &AssetChannelBinding{
 		ExternalID:  externalID,
 		NamespaceID: namespaceID,
+		ScopeID:     scopeID,
+		GroupID:     groupID,
 		ChannelID:   channelID,
 		TokenID:     tokenID,
 		CreatedAt:   now,
@@ -41,8 +70,32 @@ func UpsertAssetChannelBinding(externalID string, namespaceID string, channelID 
 	if err := DB.Where("external_id = ?", externalID).First(&stored).Error; err != nil {
 		return err
 	}
-	if stored.ChannelID != channelID || stored.TokenID != tokenID || stored.NamespaceID != namespaceID {
+	if stored.ChannelID != channelID || stored.NamespaceID != namespaceID {
 		return fmt.Errorf("asset identifier is already bound to another channel or API token")
+	}
+	if scopeID == "" {
+		if stored.TokenID != tokenID || stored.ScopeID != "" {
+			return fmt.Errorf("asset identifier is already bound to another channel or API token")
+		}
+		return nil
+	}
+	if stored.ScopeID != "" && stored.ScopeID != scopeID {
+		return fmt.Errorf("asset identifier is already bound to another asset scope")
+	}
+	if stored.ScopeID == "" && stored.TokenID != tokenID {
+		return fmt.Errorf("asset identifier is already bound to another API token")
+	}
+	if stored.ScopeID == "" || (stored.GroupID == "" && groupID != "") {
+		updates := map[string]interface{}{
+			"scope_id":   scopeID,
+			"updated_at": now,
+		}
+		if groupID != "" {
+			updates["group_id"] = groupID
+		}
+		if err := DB.Model(&stored).Updates(updates).Error; err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -78,8 +131,23 @@ func ResolveAssetChannelBinding(externalIDs []string, tokenID int) (int, bool, e
 	}
 	channelID := bindings[0].ChannelID
 	for _, binding := range bindings {
-		if binding.TokenID != tokenID {
-			return 0, false, fmt.Errorf("asset reference belongs to another API token")
+		if binding.ScopeID == "" {
+			if binding.TokenID != tokenID {
+				return 0, false, fmt.Errorf("asset reference belongs to another API token")
+			}
+		} else {
+			allowed, err := AssetScopeAllowsToken(
+				binding.NamespaceID,
+				binding.ScopeID,
+				binding.ChannelID,
+				tokenID,
+			)
+			if err != nil {
+				return 0, false, err
+			}
+			if !allowed {
+				return 0, false, fmt.Errorf("asset reference belongs to another asset scope")
+			}
 		}
 		if binding.ChannelID != channelID {
 			return 0, false, fmt.Errorf("asset references belong to different upstream channels")

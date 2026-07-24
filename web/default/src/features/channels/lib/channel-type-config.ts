@@ -151,6 +151,13 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
     defaultBaseUrl: 'https://api.laomandi.com',
     supportedModels: ['doubao-seedance-2-0-260128'],
   },
+  60: {
+    id: 60,
+    name: CHANNEL_TYPES[60],
+    icon: 'doubao',
+    defaultBaseUrl: 'https://zhenze-huhehaote.cmecloud.cn/api/v3',
+    supportedModels: ['doubao-seedance-2.0'],
+  },
 }
 
 /**

@@ -102,6 +102,7 @@ export function getChannelTypeIcon(type: number): string {
     55: 'OpenAI', // Sora
     54: 'Doubao', // DoubaoVideo
     59: 'Doubao', // Seedance Domestic
+    60: 'Doubao', // Mobile Cloud Seedance
     56: 'Replicate', // Replicate
 
     // Tools & Platforms
